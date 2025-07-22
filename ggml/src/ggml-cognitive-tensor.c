@@ -451,3 +451,497 @@ void ggml_cognitive_tensor_print_stats(ggml_cognitive_kernel_t* kernel) {
         printf("\n");
     }
 }
+
+// Advanced Pattern Matching Implementation
+
+// Default pattern matching configuration
+ggml_pattern_match_config_t ggml_pattern_match_config_default(void) {
+    ggml_pattern_match_config_t config = {
+        .structure_weight = 0.4f,
+        .semantic_weight = 0.4f,
+        .phase_weight = 0.2f,
+        .fuzzy_threshold = 0.7f,
+        .enable_recursive = true,
+        .enable_hierarchical = true,
+        .max_recursion_depth = 5
+    };
+    return config;
+}
+
+// Combine multiple similarity scores using weighted average
+float ggml_pattern_match_combine_scores(
+    float structural, float semantic, float phase,
+    ggml_pattern_match_config_t* config) {
+    
+    if (!config) {
+        return (structural + semantic + phase) / 3.0f;
+    }
+    
+    float total_weight = config->structure_weight + config->semantic_weight + config->phase_weight;
+    if (total_weight == 0.0f) return 0.0f;
+    
+    return (structural * config->structure_weight + 
+            semantic * config->semantic_weight + 
+            phase * config->phase_weight) / total_weight;
+}
+
+// Extract Matula-Goebel structure from tensor
+static uint32_t extract_matula_structure(struct ggml_tensor* tensor) {
+    if (!tensor || !tensor->data) return 1;
+    
+    float* data = (float*)tensor->data;
+    size_t n_elements = ggml_nelements(tensor);
+    
+    if (n_elements >= 4) {
+        // Assume tensor contains [system_level, breadth, depth, matula_value]
+        return (uint32_t)data[3];
+    }
+    
+    // Fallback: compute simple hash-based Matula value
+    uint32_t hash = 1;
+    for (size_t i = 0; i < n_elements && i < 8; i++) {
+        uint32_t val = (uint32_t)(fabsf(data[i]) * 1000) % 100;
+        if (val > 0) {
+            hash *= ggml_nth_prime(val % 20 + 1);
+        }
+    }
+    return hash;
+}
+
+// Structure-aware pattern matching using Matula-Goebel encoding
+ggml_pattern_match_result_t ggml_pattern_match_structural(
+    struct ggml_tensor* pattern,
+    struct ggml_tensor* target,
+    ggml_cognitive_kernel_t* kernel,
+    ggml_pattern_match_config_t* config) {
+    
+    ggml_pattern_match_result_t result = {0};
+    
+    if (!pattern || !target || !kernel) {
+        result.match_type = PATTERN_MATCH_NONE;
+        return result;
+    }
+    
+    // Extract Matula values for structural comparison
+    uint32_t pattern_matula = extract_matula_structure(pattern);
+    uint32_t target_matula = extract_matula_structure(target);
+    
+    // Check for exact structural match
+    if (pattern_matula == target_matula) {
+        result.structural_similarity = 1.0f;
+        result.is_exact_match = true;
+        result.match_type = PATTERN_MATCH_EXACT;
+        result.confidence_score = 1.0f;
+        return result;
+    }
+    
+    // Factorize both Matula values for structural comparison
+    uint32_t pattern_factors[64], target_factors[64];
+    size_t pattern_factor_count, target_factor_count;
+    
+    ggml_matula_factorize(pattern_matula, pattern_factors, &pattern_factor_count);
+    ggml_matula_factorize(target_matula, target_factors, &target_factor_count);
+    
+    // Compute structural similarity based on common prime factors
+    size_t common_factors = 0;
+    size_t total_unique_factors = 0;
+    
+    for (size_t i = 0; i < pattern_factor_count; i++) {
+        for (size_t j = 0; j < target_factor_count; j++) {
+            if (pattern_factors[i] == target_factors[j]) {
+                common_factors++;
+                break;
+            }
+        }
+    }
+    
+    total_unique_factors = pattern_factor_count + target_factor_count - common_factors;
+    if (total_unique_factors == 0) {
+        result.structural_similarity = 1.0f;
+    } else {
+        result.structural_similarity = (float)(2 * common_factors) / (float)total_unique_factors;
+    }
+    
+    result.match_type = PATTERN_MATCH_STRUCTURAL;
+    result.confidence_score = result.structural_similarity;
+    
+    return result;
+}
+
+// Phase-coherence pattern matching using quantum phases
+ggml_pattern_match_result_t ggml_pattern_match_phase_coherence(
+    struct ggml_tensor* pattern,
+    struct ggml_tensor* target,
+    ggml_cognitive_kernel_t* kernel) {
+    
+    ggml_pattern_match_result_t result = {0};
+    
+    if (!pattern || !target || !kernel) {
+        result.match_type = PATTERN_MATCH_NONE;
+        return result;
+    }
+    
+    // Extract phase information from cognitive kernel tensor
+    float* pattern_data = (float*)pattern->data;
+    float* target_data = (float*)target->data;
+    size_t n_elements = ggml_nelements(pattern);
+    
+    if (ggml_nelements(target) != n_elements) {
+        result.match_type = PATTERN_MATCH_NONE;
+        return result;
+    }
+    
+    // Compute phase coherence using complex inner product
+    float real_sum = 0.0f;
+    float imag_sum = 0.0f;
+    float pattern_norm = 0.0f;
+    float target_norm = 0.0f;
+    
+    for (size_t i = 0; i < n_elements; i += 2) {
+        if (i + 1 < n_elements) {
+            // Treat pairs as complex numbers [real, imag]
+            float p_real = pattern_data[i];
+            float p_imag = pattern_data[i + 1];
+            float t_real = target_data[i];
+            float t_imag = target_data[i + 1];
+            
+            // Complex conjugate inner product: p* · t
+            real_sum += p_real * t_real + p_imag * t_imag;
+            imag_sum += p_real * t_imag - p_imag * t_real;
+            
+            pattern_norm += p_real * p_real + p_imag * p_imag;
+            target_norm += t_real * t_real + t_imag * t_imag;
+        }
+    }
+    
+    if (pattern_norm == 0.0f || target_norm == 0.0f) {
+        result.match_type = PATTERN_MATCH_NONE;
+        return result;
+    }
+    
+    // Phase coherence is the magnitude of normalized inner product
+    float coherence_magnitude = sqrtf(real_sum * real_sum + imag_sum * imag_sum);
+    result.phase_coherence = coherence_magnitude / sqrtf(pattern_norm * target_norm);
+    
+    result.match_type = PATTERN_MATCH_PHASE;
+    result.confidence_score = result.phase_coherence;
+    
+    return result;
+}
+
+// Probabilistic pattern matching with confidence scores
+ggml_pattern_match_result_t ggml_pattern_match_probabilistic(
+    struct ggml_tensor* pattern,
+    struct ggml_tensor* target,
+    ggml_cognitive_kernel_t* kernel,
+    float* confidence_map,
+    size_t map_size) {
+    
+    ggml_pattern_match_result_t result = {0};
+    
+    if (!pattern || !target || !kernel) {
+        result.match_type = PATTERN_MATCH_NONE;
+        return result;
+    }
+    
+    // First get basic semantic similarity
+    result.semantic_similarity = ggml_cognitive_tensor_similarity(pattern, target);
+    
+    // Apply confidence weighting if provided
+    if (confidence_map && map_size > 0) {
+        float confidence_boost = 0.0f;
+        size_t effective_size = map_size < ggml_nelements(pattern) ? map_size : ggml_nelements(pattern);
+        
+        for (size_t i = 0; i < effective_size; i++) {
+            confidence_boost += confidence_map[i];
+        }
+        confidence_boost /= (float)effective_size;
+        
+        // Boost semantic similarity based on confidence
+        result.semantic_similarity = result.semantic_similarity * (0.5f + 0.5f * confidence_boost);
+    }
+    
+    // Compute overall confidence based on tensor statistics
+    float* pattern_data = (float*)pattern->data;
+    float* target_data = (float*)target->data;
+    size_t n_elements = ggml_nelements(pattern);
+    
+    float variance_pattern = 0.0f;
+    float variance_target = 0.0f;
+    float mean_pattern = 0.0f;
+    float mean_target = 0.0f;
+    
+    // Compute means
+    for (size_t i = 0; i < n_elements; i++) {
+        mean_pattern += pattern_data[i];
+        mean_target += target_data[i];
+    }
+    mean_pattern /= (float)n_elements;
+    mean_target /= (float)n_elements;
+    
+    // Compute variances
+    for (size_t i = 0; i < n_elements; i++) {
+        float diff_p = pattern_data[i] - mean_pattern;
+        float diff_t = target_data[i] - mean_target;
+        variance_pattern += diff_p * diff_p;
+        variance_target += diff_t * diff_t;
+    }
+    variance_pattern /= (float)n_elements;
+    variance_target /= (float)n_elements;
+    
+    // Confidence based on similar variance (similar information content)
+    float variance_similarity = 1.0f / (1.0f + fabsf(variance_pattern - variance_target));
+    result.confidence_score = (result.semantic_similarity + variance_similarity) / 2.0f;
+    
+    result.match_type = PATTERN_MATCH_SEMANTIC;
+    
+    return result;
+}
+
+// Fuzzy pattern matching with threshold controls
+ggml_pattern_match_result_t ggml_pattern_match_fuzzy(
+    struct ggml_tensor* pattern,
+    struct ggml_tensor* target,
+    ggml_cognitive_kernel_t* kernel,
+    float threshold,
+    float tolerance) {
+    
+    ggml_pattern_match_result_t result = {0};
+    
+    if (!pattern || !target || !kernel) {
+        result.match_type = PATTERN_MATCH_NONE;
+        return result;
+    }
+    
+    // Get basic semantic similarity
+    result.semantic_similarity = ggml_cognitive_tensor_similarity(pattern, target);
+    
+    // Apply fuzzy matching logic
+    if (result.semantic_similarity >= threshold) {
+        result.is_exact_match = (result.semantic_similarity >= (1.0f - tolerance));
+        result.is_fuzzy_match = true;
+        result.match_type = result.is_exact_match ? PATTERN_MATCH_EXACT : PATTERN_MATCH_FUZZY;
+        result.confidence_score = result.semantic_similarity;
+    } else {
+        // Check if within tolerance of threshold
+        if (result.semantic_similarity >= (threshold - tolerance)) {
+            result.is_fuzzy_match = true;
+            result.match_type = PATTERN_MATCH_FUZZY;
+            // Reduced confidence for near-threshold matches
+            result.confidence_score = result.semantic_similarity * 0.8f;
+        } else {
+            result.match_type = PATTERN_MATCH_NONE;
+            result.confidence_score = 0.0f;
+        }
+    }
+    
+    return result;
+}
+
+// Recursive pattern matching for hierarchical structures
+ggml_pattern_match_result_t ggml_pattern_match_recursive(
+    struct ggml_tensor* pattern,
+    struct ggml_tensor* target,
+    ggml_cognitive_kernel_t* kernel,
+    uint32_t current_depth,
+    uint32_t max_depth) {
+    
+    ggml_pattern_match_result_t result = {0};
+    
+    if (!pattern || !target || !kernel || current_depth >= max_depth) {
+        result.match_type = PATTERN_MATCH_NONE;
+        return result;
+    }
+    
+    // Base case: direct pattern matching
+    ggml_pattern_match_config_t config = ggml_pattern_match_config_default();
+    result = ggml_pattern_match_structural(pattern, target, kernel, &config);
+    
+    // If no good match at this level, try decomposing using Matula factorization
+    if (result.structural_similarity < 0.5f && current_depth < max_depth - 1) {
+        uint32_t pattern_matula = extract_matula_structure(pattern);
+        uint32_t target_matula = extract_matula_structure(target);
+        
+        uint32_t pattern_factors[64], target_factors[64];
+        size_t pattern_factor_count, target_factor_count;
+        
+        ggml_matula_factorize(pattern_matula, pattern_factors, &pattern_factor_count);
+        ggml_matula_factorize(target_matula, target_factors, &target_factor_count);
+        
+        // Try matching individual factors recursively
+        float recursive_score = 0.0f;
+        size_t successful_matches = 0;
+        
+        for (size_t i = 0; i < pattern_factor_count && i < 4; i++) {
+            for (size_t j = 0; j < target_factor_count && j < 4; j++) {
+                if (pattern_factors[i] == target_factors[j]) {
+                    recursive_score += 1.0f;
+                    successful_matches++;
+                }
+            }
+        }
+        
+        if (successful_matches > 0) {
+            recursive_score /= (float)fmax(pattern_factor_count, target_factor_count);
+            if (recursive_score > result.structural_similarity) {
+                result.structural_similarity = recursive_score;
+                result.match_type = PATTERN_MATCH_RECURSIVE;
+                result.confidence_score = recursive_score * 0.9f; // Slightly reduced for recursive
+            }
+        }
+    }
+    
+    return result;
+}
+
+// Multi-level pattern matching (syntactic, semantic, pragmatic)
+ggml_pattern_match_result_t ggml_pattern_match_multilevel(
+    struct ggml_tensor* pattern,
+    struct ggml_tensor* target,
+    ggml_cognitive_kernel_t* kernel,
+    uint32_t match_levels) {
+    
+    ggml_pattern_match_result_t result = {0};
+    
+    if (!pattern || !target || !kernel) {
+        result.match_type = PATTERN_MATCH_NONE;
+        return result;
+    }
+    
+    float level_scores[3] = {0.0f, 0.0f, 0.0f};
+    int level_count = 0;
+    
+    // Level 1: Syntactic (structural) matching
+    if (match_levels & 0x1) {
+        ggml_pattern_match_config_t config = ggml_pattern_match_config_default();
+        ggml_pattern_match_result_t structural_result = 
+            ggml_pattern_match_structural(pattern, target, kernel, &config);
+        level_scores[0] = structural_result.structural_similarity;
+        level_count++;
+    }
+    
+    // Level 2: Semantic matching
+    if (match_levels & 0x2) {
+        level_scores[1] = ggml_cognitive_tensor_similarity(pattern, target);
+        level_count++;
+    }
+    
+    // Level 3: Pragmatic (phase coherence) matching
+    if (match_levels & 0x4) {
+        ggml_pattern_match_result_t phase_result = 
+            ggml_pattern_match_phase_coherence(pattern, target, kernel);
+        level_scores[2] = phase_result.phase_coherence;
+        level_count++;
+    }
+    
+    if (level_count == 0) {
+        result.match_type = PATTERN_MATCH_NONE;
+        return result;
+    }
+    
+    // Combine scores with appropriate weights
+    result.structural_similarity = level_scores[0];
+    result.semantic_similarity = level_scores[1];
+    result.phase_coherence = level_scores[2];
+    
+    ggml_pattern_match_config_t config = ggml_pattern_match_config_default();
+    result.confidence_score = ggml_pattern_match_combine_scores(
+        level_scores[0], level_scores[1], level_scores[2], &config);
+    
+    // Determine primary match type based on strongest component
+    if (level_scores[0] >= level_scores[1] && level_scores[0] >= level_scores[2]) {
+        result.match_type = PATTERN_MATCH_STRUCTURAL;
+    } else if (level_scores[1] >= level_scores[2]) {
+        result.match_type = PATTERN_MATCH_SEMANTIC;
+    } else {
+        result.match_type = PATTERN_MATCH_PHASE;
+    }
+    
+    return result;
+}
+
+// Unified advanced pattern matching interface
+ggml_pattern_match_result_t ggml_pattern_match_advanced(
+    struct ggml_tensor* pattern,
+    struct ggml_tensor* target,
+    ggml_cognitive_kernel_t* kernel,
+    ggml_pattern_match_config_t* config) {
+    
+    ggml_pattern_match_result_t result = {0};
+    
+    if (!pattern || !target || !kernel) {
+        result.match_type = PATTERN_MATCH_NONE;
+        return result;
+    }
+    
+    ggml_pattern_match_config_t default_config = ggml_pattern_match_config_default();
+    if (!config) config = &default_config;
+    
+    // Perform multi-level matching (all levels)
+    ggml_pattern_match_result_t multilevel_result = 
+        ggml_pattern_match_multilevel(pattern, target, kernel, 0x7);
+    
+    result.structural_similarity = multilevel_result.structural_similarity;
+    result.semantic_similarity = multilevel_result.semantic_similarity;
+    result.phase_coherence = multilevel_result.phase_coherence;
+    
+    // Apply fuzzy matching if enabled
+    if (config->fuzzy_threshold > 0.0f) {
+        ggml_pattern_match_result_t fuzzy_result = 
+            ggml_pattern_match_fuzzy(pattern, target, kernel, 
+                                   config->fuzzy_threshold, 0.1f);
+        result.is_fuzzy_match = fuzzy_result.is_fuzzy_match;
+        result.is_exact_match = fuzzy_result.is_exact_match;
+    }
+    
+    // Apply recursive matching if enabled
+    if (config->enable_recursive && config->max_recursion_depth > 0) {
+        ggml_pattern_match_result_t recursive_result = 
+            ggml_pattern_match_recursive(pattern, target, kernel, 
+                                       0, config->max_recursion_depth);
+        // Use recursive result if it's better
+        if (recursive_result.confidence_score > result.confidence_score) {
+            result.structural_similarity = recursive_result.structural_similarity;
+            result.match_type = recursive_result.match_type;
+        }
+    }
+    
+    // Compute final confidence score
+    result.confidence_score = ggml_pattern_match_combine_scores(
+        result.structural_similarity, 
+        result.semantic_similarity, 
+        result.phase_coherence, 
+        config);
+    
+    // Determine final match type based on strongest component and configuration
+    if (result.is_exact_match) {
+        result.match_type = PATTERN_MATCH_EXACT;
+    } else if (result.is_fuzzy_match) {
+        result.match_type = PATTERN_MATCH_FUZZY;
+    } else {
+        result.match_type = multilevel_result.match_type;
+    }
+    
+    return result;
+}
+
+// Print pattern match result
+void ggml_pattern_match_result_print(ggml_pattern_match_result_t* result) {
+    if (!result) return;
+    
+    printf("Pattern Match Result:\n");
+    printf("  Match Type: %s\n", 
+           result->match_type == PATTERN_MATCH_EXACT ? "Exact" :
+           result->match_type == PATTERN_MATCH_STRUCTURAL ? "Structural" :
+           result->match_type == PATTERN_MATCH_SEMANTIC ? "Semantic" :
+           result->match_type == PATTERN_MATCH_PHASE ? "Phase" :
+           result->match_type == PATTERN_MATCH_FUZZY ? "Fuzzy" :
+           result->match_type == PATTERN_MATCH_RECURSIVE ? "Recursive" :
+           "None");
+    printf("  Structural Similarity: %.3f\n", result->structural_similarity);
+    printf("  Semantic Similarity: %.3f\n", result->semantic_similarity);
+    printf("  Phase Coherence: %.3f\n", result->phase_coherence);
+    printf("  Confidence Score: %.3f\n", result->confidence_score);
+    printf("  Exact Match: %s\n", result->is_exact_match ? "Yes" : "No");
+    printf("  Fuzzy Match: %s\n", result->is_fuzzy_match ? "Yes" : "No");
+}
