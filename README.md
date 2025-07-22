@@ -51,6 +51,12 @@ make -j8
    - Performance-based resource management
    - Recursive self-improvement
 
+5. **Foundation Layer**: CogUtil Utility Library
+   - Type system for OpenCog atoms with inheritance
+   - Configuration management and structured logging
+   - Memory pool allocation and string utilities
+   - Comprehensive error handling and validation
+
 ### 🌐 Distributed Communication
 
 The system leverages and extends the existing ggml RPC infrastructure:
@@ -81,6 +87,7 @@ The system leverages and extends the existing ggml RPC infrastructure:
 - [**Distributed Cognitive Architecture**](docs/distributed-cognitive-architecture.md) - Complete architectural overview
 - [**Implementation Guide**](docs/implementation-guide.md) - Practical development guide
 - [**Cognitive Grammar Examples**](docs/cognitive-grammar-examples.md) - Grammar system usage
+- [**CogUtil Library**](docs/cogutil.md) - OpenCog utility library for foundation services
 
 ## Demo Applications
 

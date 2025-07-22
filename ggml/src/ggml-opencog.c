@@ -1,10 +1,44 @@
 #include "ggml-opencog.h"
+#include "ggml-cogutil.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <time.h>
 #include <assert.h>
+
+// Global type registry for OpenCog types
+static cogutil_type_registry_t g_opencog_type_registry;
+static bool g_opencog_types_initialized = false;
+
+// Initialize OpenCog type system using cogutil
+static cogutil_error_t initialize_opencog_types(void) {
+    if (g_opencog_types_initialized) return COGUTIL_SUCCESS;
+    
+    cogutil_error_t result = cogutil_type_registry_init(&g_opencog_type_registry);
+    if (result != COGUTIL_SUCCESS) {
+        COGUTIL_LOG_ERROR("Failed to initialize OpenCog type registry: %s", 
+                         cogutil_error_message(result));
+        return result;
+    }
+    
+    // Register OpenCog atom types
+    uint16_t type_id;
+    cogutil_type_register(&g_opencog_type_registry, "ConceptNode", true, false, 1, &type_id);
+    cogutil_type_register(&g_opencog_type_registry, "PredicateNode", true, false, 1, &type_id);
+    cogutil_type_register(&g_opencog_type_registry, "VariableNode", true, false, 1, &type_id);
+    cogutil_type_register(&g_opencog_type_registry, "InheritanceLink", false, true, 2, &type_id);
+    cogutil_type_register(&g_opencog_type_registry, "EvaluationLink", false, true, 2, &type_id);
+    cogutil_type_register(&g_opencog_type_registry, "ImplicationLink", false, true, 2, &type_id);
+    cogutil_type_register(&g_opencog_type_registry, "SimilarityLink", false, true, 2, &type_id);
+    cogutil_type_register(&g_opencog_type_registry, "MemberLink", false, true, 2, &type_id);
+    
+    g_opencog_types_initialized = true;
+    COGUTIL_LOG_INFO("OpenCog type system initialized with %zu types", 
+                     g_opencog_type_registry.type_count);
+    
+    return COGUTIL_SUCCESS;
+}
 
 // Generate unique atom ID
 static uint64_t generate_atom_id(opencog_atomspace_t* atomspace) {
@@ -13,14 +47,45 @@ static uint64_t generate_atom_id(opencog_atomspace_t* atomspace) {
 
 // Initialize OpenCog AtomSpace
 opencog_atomspace_t* opencog_atomspace_init(struct ggml_context* ctx) {
+    // Validate input parameters
+    cogutil_error_t validation_result = cogutil_validate_pointer(ctx);
+    if (validation_result != COGUTIL_SUCCESS) {
+        COGUTIL_LOG_ERROR("Invalid context pointer: %s", cogutil_error_message(validation_result));
+        return NULL;
+    }
+    
+    // Initialize logging if not already done
+    static bool log_initialized = false;
+    if (!log_initialized) {
+        cogutil_log_init(COGUTIL_LOG_INFO, NULL);
+        log_initialized = true;
+    }
+    
+    // Initialize OpenCog type system
+    cogutil_error_t type_init_result = initialize_opencog_types();
+    if (type_init_result != COGUTIL_SUCCESS) {
+        COGUTIL_LOG_ERROR("Failed to initialize OpenCog types: %s", 
+                         cogutil_error_message(type_init_result));
+        return NULL;
+    }
+    
     opencog_atomspace_t* atomspace = malloc(sizeof(opencog_atomspace_t));
-    if (!atomspace) return NULL;
+    if (!atomspace) {
+        COGUTIL_LOG_ERROR("Memory allocation failed for AtomSpace");
+        return NULL;
+    }
     
     atomspace->ctx = ctx;
     
     // Initialize atom storage
     atomspace->atom_capacity = OPENCOG_MAX_ATOMS;
     atomspace->atoms = calloc(atomspace->atom_capacity, sizeof(opencog_atom_t));
+    if (!atomspace->atoms) {
+        COGUTIL_LOG_ERROR("Memory allocation failed for atom storage");
+        free(atomspace);
+        return NULL;
+    }
+    
     atomspace->atom_count = 0;
     atomspace->next_atom_id = 1;
     
@@ -41,8 +106,8 @@ opencog_atomspace_t* opencog_atomspace_init(struct ggml_context* ctx) {
     atomspace->initialized = true;
     atomspace->cogfluence_system = NULL;
     
-    printf("OpenCog AtomSpace initialized with capacity for %zu atoms\n", 
-           atomspace->atom_capacity);
+    COGUTIL_LOG_INFO("OpenCog AtomSpace initialized with capacity for %zu atoms", 
+                     atomspace->atom_capacity);
     
     return atomspace;
 }
@@ -71,7 +136,22 @@ uint64_t opencog_add_node(
     opencog_atom_type_t type,
     const char* name) {
     
-    if (!atomspace || !name || atomspace->atom_count >= atomspace->atom_capacity) {
+    // Validate input parameters
+    cogutil_error_t validation_result = cogutil_validate_pointer(atomspace);
+    if (validation_result != COGUTIL_SUCCESS) {
+        COGUTIL_LOG_ERROR("Invalid atomspace pointer: %s", cogutil_error_message(validation_result));
+        return 0;
+    }
+    
+    validation_result = cogutil_validate_string(name);
+    if (validation_result != COGUTIL_SUCCESS) {
+        COGUTIL_LOG_ERROR("Invalid atom name: %s", cogutil_error_message(validation_result));
+        return 0;
+    }
+    
+    if (atomspace->atom_count >= atomspace->atom_capacity) {
+        COGUTIL_LOG_ERROR("AtomSpace capacity exceeded: %zu/%zu", 
+                         atomspace->atom_count, atomspace->atom_capacity);
         return 0;
     }
     
@@ -80,8 +160,12 @@ uint64_t opencog_add_node(
     
     // Initialize atom
     atom->atom_id = atom_id;
-    strncpy(atom->name, name, OPENCOG_MAX_ATOM_NAME - 1);
-    atom->name[OPENCOG_MAX_ATOM_NAME - 1] = '\0';
+    cogutil_error_t copy_result = cogutil_safe_strcpy(atom->name, OPENCOG_MAX_ATOM_NAME, name);
+    if (copy_result != COGUTIL_SUCCESS) {
+        COGUTIL_LOG_WARN("Atom name truncated: %s", name);
+        strncpy(atom->name, name, OPENCOG_MAX_ATOM_NAME - 1);
+        atom->name[OPENCOG_MAX_ATOM_NAME - 1] = '\0';
+    }
     atom->type = type;
     
     // Initialize truth value
@@ -98,10 +182,19 @@ uint64_t opencog_add_node(
     atom->tensor_encoding = ggml_new_tensor_1d(atomspace->ctx, GGML_TYPE_F32, 128);
     ggml_set_zero(atom->tensor_encoding);
     
-    // Initialize name-based encoding
+    // Initialize name-based encoding using cogutil hash
     if (atom->tensor_encoding->type == GGML_TYPE_F32) {
         float* data = (float*)atom->tensor_encoding->data;
-        for (int i = 0; i < 128 && i < strlen(name); i++) {
+        uint32_t name_hash = cogutil_hash_string(name);
+        
+        // Simple hash-based encoding
+        for (int i = 0; i < 128; i++) {
+            data[i] = ((float)((name_hash >> (i % 32)) & 1)) * 0.5f - 0.25f;
+        }
+        
+        // Mix in character-based encoding for first few dimensions
+        size_t name_len = strlen(name);
+        for (int i = 0; i < 32 && i < name_len; i++) {
             data[i] = (float)name[i] / 255.0f;
         }
     }
@@ -115,14 +208,14 @@ uint64_t opencog_add_node(
     atom->incoming_capacity = 0;
     
     // Initialize metadata
-    atom->creation_time = (uint64_t)time(NULL);
+    atom->creation_time = cogutil_get_timestamp_ms();
     atom->last_access = atom->creation_time;
     atom->is_deleted = false;
     atom->cogfluence_unit_id = 0;
     
     atomspace->atom_count++;
     
-    printf("Added OpenCog node '%s' (type %d, ID %lu)\n", name, type, atom_id);
+    COGUTIL_LOG_DEBUG("Added OpenCog node '%s' (type %d, ID %lu)", name, type, atom_id);
     
     return atom_id;
 }

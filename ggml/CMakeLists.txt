@@ -265,6 +265,7 @@ set(GGML_PUBLIC_HEADERS
     include/ggml-cann.h
     include/ggml-cognitive-tensor.h
     include/ggml-cogfluence.h
+    include/ggml-cogutil.h
     include/ggml-opencog.h
     include/ggml-distributed-cognitive.h
     include/ggml-distributed-communication.h
