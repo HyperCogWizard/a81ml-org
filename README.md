@@ -96,6 +96,19 @@ The demo includes:
 - **Collaborative Reasoning**: Cross-agent knowledge exchange
 - **Attention Management**: Dynamic resource allocation
 
+### MOSES Evolutionary Optimization
+```bash
+# Demonstrates program synthesis and symbolic regression
+../bin/moses-demo
+```
+
+The MOSES demo includes:
+- **Evolutionary Program Synthesis**: Automatic generation of programs through evolution
+- **Symbolic Regression**: Learning mathematical functions from data
+- **Cognitive Integration**: Programs represented in AtomSpace and cognitive tensors
+- **Prime-based Encoding**: Uses Matula-Goebel encoding for program structures
+- **Meta-Optimization**: Self-improving optimization parameters
+
 ### Example Output
 ```
 === Consciousness Exploration Demo ===
@@ -255,7 +268,7 @@ The system tracks various cognitive performance indicators:
 
 ### Phase 2: Advanced Reasoning
 - [x] PLN reasoning engine integration
-- [ ] MOSES optimization system
+- [x] MOSES optimization system
 - [ ] Advanced pattern matching
 - [ ] Real distributed communication
 
