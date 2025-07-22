@@ -195,6 +195,7 @@ add_library(ggml-base
             ../include/ggml-opt.h
             ../include/ggml-cognitive-tensor.h
             ../include/ggml-cogfluence.h
+            ../include/ggml-cogutil.h
             ../include/ggml-opencog.h
             ../include/ggml-moses.h
             ../include/ggml-distributed-cognitive.h
@@ -210,6 +211,7 @@ add_library(ggml-base
             ggml-opt.cpp
             ggml-cognitive-tensor.c
             ggml-cogfluence.c
+            ggml-cogutil.c
             ggml-opencog.c
             ggml-moses.c
             ggml-distributed-cognitive.c
