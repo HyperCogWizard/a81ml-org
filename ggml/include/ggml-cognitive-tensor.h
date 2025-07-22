@@ -161,6 +161,101 @@ GGML_API float ggml_cognitive_tensor_similarity(
 GGML_API void ggml_cognitive_tensor_print_stats(
     ggml_cognitive_kernel_t* kernel);
 
+// Advanced Pattern Matching API
+
+// Pattern matching result structure
+typedef struct {
+    float structural_similarity;     // Matula-Goebel structure match
+    float semantic_similarity;      // Embedding space similarity  
+    float confidence_score;         // Match confidence (0.0-1.0)
+    float phase_coherence;          // Quantum phase alignment
+    uint32_t match_type;            // Type of pattern match found
+    bool is_exact_match;            // Perfect structural match
+    bool is_fuzzy_match;            // Approximate match within threshold
+} ggml_pattern_match_result_t;
+
+// Pattern matching configuration
+typedef struct {
+    float structure_weight;         // Weight for structural similarity
+    float semantic_weight;          // Weight for semantic similarity
+    float phase_weight;             // Weight for phase coherence
+    float fuzzy_threshold;          // Threshold for fuzzy matching
+    bool enable_recursive;          // Enable recursive pattern matching
+    bool enable_hierarchical;       // Enable multi-level matching
+    uint32_t max_recursion_depth;   // Maximum recursion depth
+} ggml_pattern_match_config_t;
+
+// Pattern matching types
+enum ggml_pattern_match_type {
+    PATTERN_MATCH_EXACT = 1,        // Exact structural match
+    PATTERN_MATCH_STRUCTURAL = 2,   // Structural similarity match
+    PATTERN_MATCH_SEMANTIC = 3,     // Semantic similarity match
+    PATTERN_MATCH_PHASE = 4,        // Phase coherence match
+    PATTERN_MATCH_FUZZY = 5,        // Fuzzy approximate match
+    PATTERN_MATCH_RECURSIVE = 6,    // Recursive hierarchical match
+    PATTERN_MATCH_NONE = 0          // No significant match found
+};
+
+// Advanced pattern matching functions
+
+// Structure-aware pattern matching using Matula-Goebel encoding
+GGML_API ggml_pattern_match_result_t ggml_pattern_match_structural(
+    struct ggml_tensor* pattern,
+    struct ggml_tensor* target,
+    ggml_cognitive_kernel_t* kernel,
+    ggml_pattern_match_config_t* config);
+
+// Probabilistic pattern matching with confidence scores
+GGML_API ggml_pattern_match_result_t ggml_pattern_match_probabilistic(
+    struct ggml_tensor* pattern,
+    struct ggml_tensor* target,
+    ggml_cognitive_kernel_t* kernel,
+    float* confidence_map,
+    size_t map_size);
+
+// Multi-level pattern matching (syntactic, semantic, pragmatic)
+GGML_API ggml_pattern_match_result_t ggml_pattern_match_multilevel(
+    struct ggml_tensor* pattern,
+    struct ggml_tensor* target,
+    ggml_cognitive_kernel_t* kernel,
+    uint32_t match_levels);
+
+// Recursive pattern matching for hierarchical structures  
+GGML_API ggml_pattern_match_result_t ggml_pattern_match_recursive(
+    struct ggml_tensor* pattern,
+    struct ggml_tensor* target,
+    ggml_cognitive_kernel_t* kernel,
+    uint32_t current_depth,
+    uint32_t max_depth);
+
+// Fuzzy pattern matching with threshold controls
+GGML_API ggml_pattern_match_result_t ggml_pattern_match_fuzzy(
+    struct ggml_tensor* pattern,
+    struct ggml_tensor* target,
+    ggml_cognitive_kernel_t* kernel,
+    float threshold,
+    float tolerance);
+
+// Phase-coherence pattern matching using quantum phases
+GGML_API ggml_pattern_match_result_t ggml_pattern_match_phase_coherence(
+    struct ggml_tensor* pattern,
+    struct ggml_tensor* target,
+    ggml_cognitive_kernel_t* kernel);
+
+// Unified advanced pattern matching interface
+GGML_API ggml_pattern_match_result_t ggml_pattern_match_advanced(
+    struct ggml_tensor* pattern,
+    struct ggml_tensor* target,
+    ggml_cognitive_kernel_t* kernel,
+    ggml_pattern_match_config_t* config);
+
+// Pattern matching utility functions
+GGML_API ggml_pattern_match_config_t ggml_pattern_match_config_default(void);
+GGML_API void ggml_pattern_match_result_print(ggml_pattern_match_result_t* result);
+GGML_API float ggml_pattern_match_combine_scores(
+    float structural, float semantic, float phase,
+    ggml_pattern_match_config_t* config);
+
 #ifdef __cplusplus
 }
 #endif

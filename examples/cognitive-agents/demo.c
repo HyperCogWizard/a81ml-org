@@ -1,6 +1,14 @@
 #include "cognitive-agent.h"
+#include "ggml-cognitive-tensor.h"
 #include <stdio.h>
 #include <unistd.h>
+#include <math.h>
+
+// Forward declarations
+void demo_consciousness_exploration(void);
+void demo_distributed_problem_solving(void);
+void demo_attention_economy(void);
+void demo_advanced_pattern_matching(void);
 
 // Demo: Simple consciousness exploration task
 void demo_consciousness_exploration(void) {
@@ -261,6 +269,117 @@ void demo_attention_economy(void) {
     printf("\nAttention economy demo completed.\n");
 }
 
+// Demo: Advanced Pattern Matching
+void demo_advanced_pattern_matching(void) {
+    printf("\n=== Advanced Pattern Matching Demo ===\n");
+    
+    cognitive_agent* agent = create_cognitive_agent("localhost:7002");
+    
+    printf("\nDemonstrating advanced pattern matching capabilities...\n");
+    
+    // Initialize cognitive kernel for pattern matching
+    ggml_cognitive_kernel_t* kernel = ggml_cognitive_kernel_init(agent->ctx, 8, 16, 16);
+    
+    // Create test patterns representing different types of knowledge
+    struct ggml_tensor* consciousness_pattern = ggml_new_tensor_1d(agent->ctx, GGML_TYPE_F32, 8);
+    struct ggml_tensor* awareness_pattern = ggml_new_tensor_1d(agent->ctx, GGML_TYPE_F32, 8);
+    struct ggml_tensor* cognition_pattern = ggml_new_tensor_1d(agent->ctx, GGML_TYPE_F32, 8);
+    
+    // Initialize consciousness pattern
+    float* consciousness_data = (float*)consciousness_pattern->data;
+    consciousness_data[0] = 1.0f; consciousness_data[1] = 0.8f;
+    consciousness_data[2] = 0.9f; consciousness_data[3] = 105.0f; // Matula value for complex structure
+    consciousness_data[4] = 0.7f; consciousness_data[5] = 0.6f;
+    consciousness_data[6] = 0.8f; consciousness_data[7] = 0.9f;
+    
+    // Initialize awareness pattern (similar to consciousness)
+    float* awareness_data = (float*)awareness_pattern->data;
+    awareness_data[0] = 0.95f; awareness_data[1] = 0.85f;
+    awareness_data[2] = 0.88f; awareness_data[3] = 105.0f; // Same Matula value
+    awareness_data[4] = 0.75f; awareness_data[5] = 0.65f;
+    awareness_data[6] = 0.82f; awareness_data[7] = 0.88f;
+    
+    // Initialize cognition pattern (different structure)
+    float* cognition_data = (float*)cognition_pattern->data;
+    cognition_data[0] = 0.5f; cognition_data[1] = 0.4f;
+    cognition_data[2] = 0.6f; cognition_data[3] = 42.0f; // Different Matula value
+    cognition_data[4] = 0.3f; cognition_data[5] = 0.7f;
+    cognition_data[6] = 0.5f; cognition_data[7] = 0.4f;
+    
+    printf("\nTest 1: Structural Pattern Matching\n");
+    printf("------------------------------------\n");
+    printf("Comparing consciousness vs awareness patterns (same structure):\n");
+    
+    ggml_pattern_match_config_t config = ggml_pattern_match_config_default();
+    ggml_pattern_match_result_t result1 = ggml_pattern_match_structural(
+        consciousness_pattern, awareness_pattern, kernel, &config);
+    
+    printf("Structural similarity: %.3f\n", result1.structural_similarity);
+    printf("Match type: %s\n", result1.match_type == PATTERN_MATCH_EXACT ? "Exact" : 
+                               result1.match_type == PATTERN_MATCH_STRUCTURAL ? "Structural" : "Other");
+    printf("Confidence: %.3f\n\n", result1.confidence_score);
+    
+    printf("Comparing consciousness vs cognition patterns (different structure):\n");
+    ggml_pattern_match_result_t result2 = ggml_pattern_match_structural(
+        consciousness_pattern, cognition_pattern, kernel, &config);
+    
+    printf("Structural similarity: %.3f\n", result2.structural_similarity);
+    printf("Match type: %s\n", result2.match_type == PATTERN_MATCH_EXACT ? "Exact" : 
+                               result2.match_type == PATTERN_MATCH_STRUCTURAL ? "Structural" : "Other");
+    printf("Confidence: %.3f\n\n", result2.confidence_score);
+    
+    printf("Test 2: Multi-level Pattern Matching\n");
+    printf("------------------------------------\n");
+    printf("Performing syntactic, semantic, and pragmatic analysis:\n");
+    
+    ggml_pattern_match_result_t result3 = ggml_pattern_match_multilevel(
+        consciousness_pattern, awareness_pattern, kernel, 0x7); // All levels
+    
+    printf("Structural similarity: %.3f\n", result3.structural_similarity);
+    printf("Semantic similarity: %.3f\n", result3.semantic_similarity);
+    printf("Phase coherence: %.3f\n", result3.phase_coherence);
+    printf("Combined confidence: %.3f\n\n", result3.confidence_score);
+    
+    printf("Test 3: Fuzzy Pattern Matching\n");
+    printf("------------------------------\n");
+    printf("Testing fuzzy matching with threshold controls:\n");
+    
+    ggml_pattern_match_result_t result4 = ggml_pattern_match_fuzzy(
+        consciousness_pattern, awareness_pattern, kernel, 0.8f, 0.1f);
+    
+    printf("Fuzzy match result:\n");
+    printf("  Exact match: %s\n", result4.is_exact_match ? "Yes" : "No");
+    printf("  Fuzzy match: %s\n", result4.is_fuzzy_match ? "Yes" : "No");
+    printf("  Confidence: %.3f\n\n", result4.confidence_score);
+    
+    printf("Test 4: Advanced Unified Pattern Matching\n");
+    printf("-----------------------------------------\n");
+    printf("Using unified interface with all capabilities:\n");
+    
+    config.enable_recursive = true;
+    config.enable_hierarchical = true;
+    config.fuzzy_threshold = 0.7f;
+    
+    ggml_pattern_match_result_t result5 = ggml_pattern_match_advanced(
+        consciousness_pattern, awareness_pattern, kernel, &config);
+    
+    printf("Advanced pattern matching result:\n");
+    ggml_pattern_match_result_print(&result5);
+    
+    printf("\nPattern matching demonstrates the cognitive architecture's ability to:\n");
+    printf("- Analyze structural relationships using Matula-Goebel encoding\n");
+    printf("- Perform multi-level semantic analysis\n");
+    printf("- Apply fuzzy matching with confidence thresholds\n");
+    printf("- Enable recursive hierarchical pattern recognition\n");
+    printf("- Support probabilistic and phase-coherent matching\n");
+    
+    // Cleanup
+    ggml_cognitive_kernel_free(kernel);
+    cleanup_cognitive_agent(agent);
+    
+    printf("\nAdvanced pattern matching demo completed.\n");
+}
+
 int main(void) {
     printf("GGML Cognitive Agent Network Demo\n");
     printf("================================\n");
@@ -269,6 +388,9 @@ int main(void) {
     demo_consciousness_exploration();
     demo_distributed_problem_solving();
     demo_attention_economy();
+    
+    printf("\nStarting advanced pattern matching demo...\n");
+    demo_advanced_pattern_matching();
     
     printf("\nAll demos completed successfully!\n");
     printf("\nThis demonstrates the basic framework for distributed cognitive agents\n");
