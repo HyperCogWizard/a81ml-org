@@ -198,6 +198,9 @@ add_library(ggml-base
             ../include/ggml-opencog.h
             ../include/ggml-moses.h
             ../include/ggml-distributed-cognitive.h
+            ../include/ggml-pln-reasoning.h
+            ../include/ggml-moses-optimization.h
+            ../include/ggml-pattern-matching.h
             ../include/ggml-distributed-communication.h
             ../include/gguf.h
             ggml.c
@@ -210,6 +213,9 @@ add_library(ggml-base
             ggml-opencog.c
             ggml-moses.c
             ggml-distributed-cognitive.c
+            ggml-pln-reasoning.c
+            ggml-moses-optimization.c
+            ggml-pattern-matching.c
             ggml-distributed-communication.c
             ggml-threading.cpp
             ggml-threading.h

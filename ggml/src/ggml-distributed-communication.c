@@ -1,5 +1,4 @@
 #include "ggml-distributed-communication.h"
-#include "ggml-rpc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,513 +7,760 @@
 #include <assert.h>
 
 #ifdef _WIN32
-#  define WIN32_LEAN_AND_MEAN
-#  include <winsock2.h>
-#  include <ws2tcpip.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
 #else
-#  include <arpa/inet.h>
-#  include <sys/socket.h>
-#  include <netinet/in.h>
-#  include <netdb.h>
-#  include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <netdb.h>
 #endif
 
-// Message header for all distributed communication
-typedef struct {
-    agent_message_type_t msg_type;
-    uint32_t msg_id;
-    uint32_t from_agent_id;
-    uint32_t to_agent_id;
-    uint32_t data_size;
-    uint32_t timestamp;
-} message_header_t;
+// Protocol magic number
+#define DIST_COMM_MAGIC 0x434F474E  // 'COGN'
+#define DIST_COMM_VERSION 1
 
-// Generate unique message ID
-static uint32_t generate_message_id(void) {
-    static uint32_t counter = 1;
-    return counter++;
-}
-
-// Parse endpoint string into host and port
-static bool parse_endpoint(const char* endpoint, char* host, int* port) {
-    char* colon = strchr(endpoint, ':');
-    if (!colon) return false;
+// Initialize distributed communication engine
+dist_comm_engine_t* dist_comm_init(
+    uint64_t agent_id,
+    const char* hostname,
+    uint16_t port,
+    struct ggml_context* ctx) {
     
-    size_t host_len = colon - endpoint;
-    if (host_len >= 256) return false;
+    if (!hostname || !ctx) return NULL;
     
-    strncpy(host, endpoint, host_len);
-    host[host_len] = '\0';
-    *port = atoi(colon + 1);
+    dist_comm_engine_t* engine = malloc(sizeof(dist_comm_engine_t));
+    if (!engine) return NULL;
     
-    return *port > 0 && *port < 65536;
-}
-
-// Initialize distributed communication manager
-distributed_communication_manager_t* distributed_comm_init(
-    struct ggml_context* ctx,
-    const char* local_endpoint,
-    uint32_t agent_id) {
+    memset(engine, 0, sizeof(dist_comm_engine_t));
     
-    distributed_communication_manager_t* comm = malloc(sizeof(distributed_communication_manager_t));
-    if (!comm) return NULL;
-    
-    comm->ctx = ctx;
-    comm->rpc_backend = NULL;
-    strncpy(comm->local_endpoint, local_endpoint, sizeof(comm->local_endpoint) - 1);
-    comm->local_endpoint[sizeof(comm->local_endpoint) - 1] = '\0';
-    comm->local_agent_id = agent_id;
+    // Initialize basic information
+    engine->local_agent_id = agent_id;
+    strncpy(engine->local_hostname, hostname, sizeof(engine->local_hostname) - 1);
+    engine->local_port = port;
+    engine->local_state = DIST_AGENT_CONNECTING;
+    engine->ctx = ctx;
     
     // Initialize agent registry
-    comm->agent_capacity = DISTRIBUTED_COMM_MAX_AGENTS;
-    comm->known_agents = calloc(comm->agent_capacity, sizeof(distributed_agent_info_t));
-    comm->agent_count = 0;
+    engine->agent_capacity = DIST_COMM_MAX_AGENTS;
+    engine->agents = calloc(engine->agent_capacity, sizeof(dist_agent_info_t));
+    if (!engine->agents) {
+        free(engine);
+        return NULL;
+    }
     
-    // Initialize network topology
-    comm->network_capacity = DISTRIBUTED_COMM_MAX_NETWORKS;
-    comm->networks = calloc(comm->network_capacity, sizeof(cognitive_network_t));
-    comm->network_count = 0;
+    // Initialize connection management
+    engine->connection_capacity = DIST_COMM_MAX_CONNECTIONS;
+    engine->connections = calloc(engine->connection_capacity, sizeof(dist_connection_t));
+    if (!engine->connections) {
+        free(engine->agents);
+        free(engine);
+        return NULL;
+    }
     
-    // Initialize communication state
-    comm->server_active = false;
-    comm->discovery_active = false;
-    comm->message_sequence = 0;
-    comm->total_bytes_sent = 0;
-    comm->total_bytes_received = 0;
+    // Initialize message queues
+    engine->max_queue_size = 1000;
+    engine->outgoing_queue = calloc(engine->max_queue_size, sizeof(dist_message_t*));
+    engine->incoming_queue = calloc(engine->max_queue_size, sizeof(dist_message_t*));
+    if (!engine->outgoing_queue || !engine->incoming_queue) {
+        free(engine->connections);
+        free(engine->agents);
+        if (engine->outgoing_queue) free(engine->outgoing_queue);
+        if (engine->incoming_queue) free(engine->incoming_queue);
+        free(engine);
+        return NULL;
+    }
     
-    // Initialize performance metrics
-    comm->successful_connections = 0;
-    comm->failed_connections = 0;
-    comm->network_latency_avg = 0.0f;
-    comm->message_success_rate = 1.0f;
+    // Initialize sockets to invalid values
+    engine->listen_socket_tcp = -1;
+    engine->listen_socket_udp = -1;
+    engine->discovery_socket = -1;
     
-    printf("Distributed Communication Manager initialized for agent %u at %s\n",
-           agent_id, local_endpoint);
+    // Set default configuration
+    engine->max_connections = 64;
+    engine->heartbeat_interval = DIST_COMM_HEARTBEAT_INTERVAL;
+    engine->discovery_interval = 60; // seconds
+    engine->message_timeout = 30000; // 30 seconds in ms
+    engine->connection_quality_threshold = 0.7f;
+    engine->discovery_enabled = true;
+    engine->auto_connect = true;
     
-    return comm;
+    engine->initialized = true;
+    
+    printf("Distributed communication engine initialized for agent %lu at %s:%u\n",
+           agent_id, hostname, port);
+    
+    return engine;
 }
 
-// Free distributed communication manager
-void distributed_comm_free(distributed_communication_manager_t* comm) {
-    if (!comm) return;
+// Free distributed communication engine
+void dist_comm_free(dist_comm_engine_t* engine) {
+    if (!engine) return;
     
-    // Free agent registry
-    free(comm->known_agents);
+    // Stop services if running
+    if (engine->is_running) {
+        dist_comm_stop(engine);
+    }
     
-    // Free networks
-    for (size_t i = 0; i < comm->network_count; i++) {
-        if (comm->networks[i].agents) {
-            free(comm->networks[i].agents);
+    // Free message queues
+    if (engine->outgoing_queue) {
+        for (size_t i = 0; i < engine->outgoing_queue_size; i++) {
+            if (engine->outgoing_queue[i]) {
+                dist_comm_free_message(engine->outgoing_queue[i]);
+            }
+        }
+        free(engine->outgoing_queue);
+    }
+    
+    if (engine->incoming_queue) {
+        for (size_t i = 0; i < engine->incoming_queue_size; i++) {
+            if (engine->incoming_queue[i]) {
+                dist_comm_free_message(engine->incoming_queue[i]);
+            }
+        }
+        free(engine->incoming_queue);
+    }
+    
+    // Free connections
+    if (engine->connections) {
+        for (size_t i = 0; i < engine->connection_count; i++) {
+            dist_connection_t* conn = &engine->connections[i];
+            if (conn->socket_fd >= 0) {
+#ifdef _WIN32
+                closesocket(conn->socket_fd);
+#else
+                close(conn->socket_fd);
+#endif
+            }
+            if (conn->send_buffer) free(conn->send_buffer);
+            if (conn->receive_buffer) free(conn->receive_buffer);
+        }
+        free(engine->connections);
+    }
+    
+    // Free agents
+    if (engine->agents) {
+        free(engine->agents);
+    }
+    
+    // Close sockets
+    if (engine->listen_socket_tcp >= 0) {
+#ifdef _WIN32
+        closesocket(engine->listen_socket_tcp);
+#else
+        close(engine->listen_socket_tcp);
+#endif
+    }
+    
+    if (engine->listen_socket_udp >= 0) {
+#ifdef _WIN32
+        closesocket(engine->listen_socket_udp);
+#else
+        close(engine->listen_socket_udp);
+#endif
+    }
+    
+    if (engine->discovery_socket >= 0) {
+#ifdef _WIN32
+        closesocket(engine->discovery_socket);
+#else
+        close(engine->discovery_socket);
+#endif
+    }
+    
+#ifdef _WIN32
+    WSACleanup();
+#endif
+    
+    free(engine);
+}
+
+// Initialize networking (platform-specific)
+static bool init_networking() {
+#ifdef _WIN32
+    WSADATA wsaData;
+    return WSAStartup(MAKEWORD(2, 2), &wsaData) == 0;
+#else
+    return true; // Unix-like systems don't need special initialization
+#endif
+}
+
+// Create and bind TCP socket
+static int create_tcp_socket(const char* hostname, uint16_t port) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) return -1;
+    
+    // Set socket options
+    int opt = 1;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+    
+    // Bind socket
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    
+    if (strcmp(hostname, "localhost") == 0) {
+        addr.sin_addr.s_addr = INADDR_ANY;
+    } else {
+        if (inet_pton(AF_INET, hostname, &addr.sin_addr) <= 0) {
+            // Try hostname resolution
+            struct hostent* he = gethostbyname(hostname);
+            if (!he) {
+#ifdef _WIN32
+                closesocket(sock);
+#else
+                close(sock);
+#endif
+                return -1;
+            }
+            memcpy(&addr.sin_addr, he->h_addr_list[0], he->h_length);
         }
     }
-    free(comm->networks);
     
-    free(comm);
+    if (bind(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+#ifdef _WIN32
+        closesocket(sock);
+#else
+        close(sock);
+#endif
+        return -1;
+    }
+    
+    return sock;
 }
 
-// Start communication server
-bool distributed_comm_start_server(distributed_communication_manager_t* comm) {
-    if (!comm) return false;
+// Create and bind UDP socket
+static int create_udp_socket(const char* hostname, uint16_t port) {
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock < 0) return -1;
     
-    char host[256];
-    int port;
-    if (!parse_endpoint(comm->local_endpoint, host, &port)) {
-        printf("Failed to parse endpoint: %s\n", comm->local_endpoint);
+    // Set socket options
+    int opt = 1;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+    
+    // Bind socket
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = INADDR_ANY;
+    
+    if (bind(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+#ifdef _WIN32
+        closesocket(sock);
+#else
+        close(sock);
+#endif
+        return -1;
+    }
+    
+    return sock;
+}
+
+// Start communication services
+bool dist_comm_start(dist_comm_engine_t* engine) {
+    if (!engine || engine->is_running) return false;
+    
+    if (!init_networking()) {
+        printf("Failed to initialize networking\n");
         return false;
     }
     
-    // Initialize RPC backend for networking (if available)
-    comm->rpc_backend = NULL;  // For now, don't use RPC to avoid linking issues
-    /*
-    comm->rpc_backend = ggml_backend_rpc_init(comm->local_endpoint);
-    if (!comm->rpc_backend) {
-        printf("Failed to initialize RPC backend for %s\n", comm->local_endpoint);
+    // Create TCP listening socket
+    engine->listen_socket_tcp = create_tcp_socket(engine->local_hostname, engine->local_port);
+    if (engine->listen_socket_tcp < 0) {
+        printf("Failed to create TCP socket on %s:%u\n", 
+               engine->local_hostname, engine->local_port);
         return false;
     }
-    */
     
-    comm->server_active = true;
-    printf("Distributed communication server started at %s\n", comm->local_endpoint);
+    // Start listening
+    if (listen(engine->listen_socket_tcp, 10) < 0) {
+        printf("Failed to listen on TCP socket\n");
+#ifdef _WIN32
+        closesocket(engine->listen_socket_tcp);
+#else
+        close(engine->listen_socket_tcp);
+#endif
+        engine->listen_socket_tcp = -1;
+        return false;
+    }
+    
+    // Create UDP socket
+    engine->listen_socket_udp = create_udp_socket(engine->local_hostname, engine->local_port + 1);
+    if (engine->listen_socket_udp < 0) {
+        printf("Warning: Failed to create UDP socket\n");
+        // Continue without UDP - not critical
+    }
+    
+    // Create discovery socket
+    if (engine->discovery_enabled) {
+        engine->discovery_socket = create_udp_socket("0.0.0.0", DIST_COMM_DISCOVERY_PORT);
+        if (engine->discovery_socket < 0) {
+            printf("Warning: Failed to create discovery socket\n");
+        }
+    }
+    
+    engine->is_running = true;
+    engine->local_state = DIST_AGENT_ACTIVE;
+    
+    printf("Communication services started for agent %lu on %s:%u\n",
+           engine->local_agent_id, engine->local_hostname, engine->local_port);
+    
     return true;
 }
 
-// Register remote agent
-bool distributed_comm_register_agent(
-    distributed_communication_manager_t* comm,
-    const char* remote_endpoint,
-    const char* agent_name) {
+// Stop communication services
+bool dist_comm_stop(dist_comm_engine_t* engine) {
+    if (!engine || !engine->is_running) return false;
     
-    if (!comm || comm->agent_count >= comm->agent_capacity) return false;
+    engine->is_running = false;
+    engine->local_state = DIST_AGENT_DISCONNECTED;
     
-    // Generate unique agent ID based on endpoint
-    uint32_t remote_agent_id = 0;
-    for (const char* p = remote_endpoint; *p; p++) {
-        remote_agent_id = remote_agent_id * 31 + *p;
+    // Close all connections
+    for (size_t i = 0; i < engine->connection_count; i++) {
+        dist_connection_t* conn = &engine->connections[i];
+        if (conn->socket_fd >= 0) {
+#ifdef _WIN32
+            closesocket(conn->socket_fd);
+#else
+            close(conn->socket_fd);
+#endif
+            conn->socket_fd = -1;
+            conn->is_active = false;
+        }
     }
     
-    // Check if agent already registered
-    for (size_t i = 0; i < comm->agent_count; i++) {
-        if (comm->known_agents[i].agent_id == remote_agent_id) {
-            printf("Agent %u already registered\n", remote_agent_id);
+    // Close listening sockets
+    if (engine->listen_socket_tcp >= 0) {
+#ifdef _WIN32
+        closesocket(engine->listen_socket_tcp);
+#else
+        close(engine->listen_socket_tcp);
+#endif
+        engine->listen_socket_tcp = -1;
+    }
+    
+    if (engine->listen_socket_udp >= 0) {
+#ifdef _WIN32
+        closesocket(engine->listen_socket_udp);
+#else
+        close(engine->listen_socket_udp);
+#endif
+        engine->listen_socket_udp = -1;
+    }
+    
+    if (engine->discovery_socket >= 0) {
+#ifdef _WIN32
+        closesocket(engine->discovery_socket);
+#else
+        close(engine->discovery_socket);
+#endif
+        engine->discovery_socket = -1;
+    }
+    
+    printf("Communication services stopped for agent %lu\n", engine->local_agent_id);
+    
+    return true;
+}
+
+// Register agent capabilities
+bool dist_comm_register_capabilities(
+    dist_comm_engine_t* engine,
+    bool supports_pln,
+    bool supports_patterns,
+    bool supports_tensors,
+    bool supports_coordination) {
+    
+    if (!engine) return false;
+    
+    // Find or create local agent entry
+    dist_agent_info_t* local_agent = NULL;
+    for (size_t i = 0; i < engine->agent_count; i++) {
+        if (engine->agents[i].agent_id == engine->local_agent_id) {
+            local_agent = &engine->agents[i];
+            break;
+        }
+    }
+    
+    if (!local_agent && engine->agent_count < engine->agent_capacity) {
+        local_agent = &engine->agents[engine->agent_count++];
+        local_agent->agent_id = engine->local_agent_id;
+        strncpy(local_agent->hostname, engine->local_hostname, sizeof(local_agent->hostname) - 1);
+        local_agent->port = engine->local_port;
+        local_agent->state = engine->local_state;
+        local_agent->preferred_protocol = DIST_PROTOCOL_TCP;
+    }
+    
+    if (local_agent) {
+        local_agent->supports_pln_reasoning = supports_pln;
+        local_agent->supports_pattern_matching = supports_patterns;
+        local_agent->supports_tensor_operations = supports_tensors;
+        local_agent->supports_coordination = supports_coordination;
+        
+        // Set default cognitive profile
+        local_agent->attention_capacity = 1.0f;
+        local_agent->reasoning_capacity = 1.0f;
+        local_agent->memory_capacity = 1.0f;
+        
+        printf("Registered capabilities for agent %lu: PLN=%d, Patterns=%d, Tensors=%d, Coordination=%d\n",
+               engine->local_agent_id, supports_pln, supports_patterns, supports_tensors, supports_coordination);
+        
+        return true;
+    }
+    
+    return false;
+}
+
+// Create message
+dist_message_t* dist_comm_create_message(
+    dist_message_type_t type,
+    uint64_t sender_id,
+    uint64_t receiver_id,
+    const void* payload,
+    size_t payload_size) {
+    
+    dist_message_t* message = malloc(sizeof(dist_message_t));
+    if (!message) return NULL;
+    
+    memset(message, 0, sizeof(dist_message_t));
+    
+    // Initialize header
+    message->header.magic = DIST_COMM_MAGIC;
+    message->header.version = DIST_COMM_VERSION;
+    message->header.type = type;
+    message->header.message_id = (uint64_t)time(NULL) * 1000000 + rand() % 1000000; // Simple ID generation
+    message->header.sender_id = sender_id;
+    message->header.receiver_id = receiver_id;
+    message->header.payload_size = (uint32_t)payload_size;
+    message->header.timestamp = (uint64_t)time(NULL);
+    message->header.hop_count = 0;
+    message->header.priority = 5; // Medium priority
+    message->header.correlation_id = 0;
+    
+    // Copy payload
+    if (payload && payload_size > 0) {
+        message->payload_capacity = payload_size;
+        message->payload = malloc(payload_size);
+        if (message->payload) {
+            memcpy(message->payload, payload, payload_size);
+        } else {
+            free(message);
+            return NULL;
+        }
+    }
+    
+    // Initialize QoS parameters
+    message->reliability_requirement = 0.9f;
+    message->latency_requirement = 1000.0f; // 1 second default
+    message->send_time = (uint64_t)time(NULL);
+    
+    return message;
+}
+
+// Free message
+void dist_comm_free_message(dist_message_t* message) {
+    if (!message) return;
+    
+    if (message->payload) {
+        free(message->payload);
+    }
+    
+    free(message);
+}
+
+// Send message (simplified implementation)
+bool dist_comm_send_message(
+    dist_comm_engine_t* engine,
+    dist_message_t* message) {
+    
+    if (!engine || !message || !engine->is_running) return false;
+    
+    // Find connection to target agent
+    dist_connection_t* connection = NULL;
+    for (size_t i = 0; i < engine->connection_count; i++) {
+        if (engine->connections[i].remote_agent_id == message->header.receiver_id &&
+            engine->connections[i].is_active) {
+            connection = &engine->connections[i];
+            break;
+        }
+    }
+    
+    if (!connection) {
+        // Try to establish connection (simplified)
+        printf("No active connection to agent %lu - message queued\n", message->header.receiver_id);
+        
+        // Add to outgoing queue
+        if (engine->outgoing_queue_size < engine->max_queue_size) {
+            engine->outgoing_queue[engine->outgoing_queue_size++] = message;
             return true;
         }
+        
+        return false;
     }
     
-    // Add new agent
-    distributed_agent_info_t* agent = &comm->known_agents[comm->agent_count];
-    agent->agent_id = remote_agent_id;
-    strncpy(agent->endpoint, remote_endpoint, sizeof(agent->endpoint) - 1);
-    agent->endpoint[sizeof(agent->endpoint) - 1] = '\0';
-    strncpy(agent->agent_name, agent_name, sizeof(agent->agent_name) - 1);
-    agent->agent_name[sizeof(agent->agent_name) - 1] = '\0';
-    agent->capabilities = 0;
-    agent->last_heartbeat = (uint32_t)time(NULL);
-    agent->active = true;
-    agent->cognitive_coherence = 0.5f;
-    agent->message_count = 0;
+    // Simulate successful send
+    connection->messages_sent++;
+    connection->bytes_sent += sizeof(dist_message_header_t) + message->header.payload_size;
     
-    comm->agent_count++;
-    comm->successful_connections++;
+    engine->total_messages_sent++;
+    engine->total_bytes_sent += sizeof(dist_message_header_t) + message->header.payload_size;
     
-    printf("Registered agent %u (%s) at %s\n", remote_agent_id, agent_name, remote_endpoint);
-    return true;
-}
-
-// Find agent by ID
-distributed_agent_info_t* distributed_comm_find_agent(
-    distributed_communication_manager_t* comm,
-    uint32_t agent_id) {
-    
-    if (!comm) return NULL;
-    
-    for (size_t i = 0; i < comm->agent_count; i++) {
-        if (comm->known_agents[i].agent_id == agent_id) {
-            return &comm->known_agents[i];
-        }
-    }
-    return NULL;
-}
-
-// Send cognitive state to specific agent
-bool distributed_comm_send_cognitive_state(
-    distributed_communication_manager_t* comm,
-    uint32_t target_agent_id,
-    distributed_cognitive_architecture_t* arch) {
-    
-    if (!comm || !arch) return false;
-    
-    distributed_agent_info_t* target = distributed_comm_find_agent(comm, target_agent_id);
-    if (!target || !target->active) return false;
-    
-    // Create cognitive state packet
-    cognitive_state_packet_t state_packet = {0};
-    state_packet.agent_id = comm->local_agent_id;
-    state_packet.timestamp = (uint32_t)time(NULL);
-    state_packet.coherence_level = dashboard_compute_coherence(arch);
-    
-    // Copy attention values from dashboard
-    if (arch->dashboard) {
-        memcpy(state_packet.attention_values, arch->dashboard->attention_distribution, 
-               sizeof(state_packet.attention_values));
-        state_packet.active_workflows = arch->dashboard->active_workflows;
-        state_packet.cognitive_load = arch->dashboard->cognitive_load;
-    }
-    
-    strncpy(state_packet.endpoint, comm->local_endpoint, sizeof(state_packet.endpoint) - 1);
-    
-    // Create message header
-    message_header_t header = {0};
-    header.msg_type = AGENT_MSG_COGNITIVE_STATE;
-    header.msg_id = generate_message_id();
-    header.from_agent_id = comm->local_agent_id;
-    header.to_agent_id = target_agent_id;
-    header.data_size = sizeof(cognitive_state_packet_t);
-    header.timestamp = (uint32_t)time(NULL);
-    
-    // In a real implementation, this would use the RPC system to send the data
-    // For now, we'll simulate the sending
-    printf("Sending cognitive state from agent %u to agent %u (coherence: %.3f)\n",
-           comm->local_agent_id, target_agent_id, state_packet.coherence_level);
-    
-    comm->total_bytes_sent += sizeof(header) + sizeof(state_packet);
-    target->message_count++;
+    printf("Sent message type %d from agent %lu to agent %lu (size: %u bytes)\n",
+           message->header.type, message->header.sender_id, 
+           message->header.receiver_id, message->header.payload_size);
     
     return true;
 }
 
-// Broadcast cognitive state to all known agents
-bool distributed_comm_broadcast_cognitive_state(
-    distributed_communication_manager_t* comm,
-    distributed_cognitive_architecture_t* arch) {
+// Send broadcast message
+bool dist_comm_broadcast_message(
+    dist_comm_engine_t* engine,
+    dist_message_t* message) {
     
-    if (!comm || !arch) return false;
+    if (!engine || !message || !engine->is_running) return false;
     
-    bool success = true;
-    for (size_t i = 0; i < comm->agent_count; i++) {
-        if (comm->known_agents[i].active && 
-            comm->known_agents[i].agent_id != comm->local_agent_id) {
-            bool result = distributed_comm_send_cognitive_state(
-                comm, comm->known_agents[i].agent_id, arch);
-            success = success && result;
+    message->header.receiver_id = 0; // Broadcast ID
+    
+    size_t sent_count = 0;
+    
+    // Send to all active connections
+    for (size_t i = 0; i < engine->connection_count; i++) {
+        if (engine->connections[i].is_active) {
+            // Create copy of message for each recipient
+            dist_message_t* copy = dist_comm_create_message(
+                message->header.type,
+                message->header.sender_id,
+                engine->connections[i].remote_agent_id,
+                message->payload,
+                message->header.payload_size);
+            
+            if (copy && dist_comm_send_message(engine, copy)) {
+                sent_count++;
+            }
+            
+            if (copy) {
+                dist_comm_free_message(copy);
+            }
         }
+    }
+    
+    printf("Broadcast message type %d to %zu agents\n", message->header.type, sent_count);
+    
+    return sent_count > 0;
+}
+
+// Receive message (simplified non-blocking implementation)
+dist_message_t* dist_comm_receive_message(dist_comm_engine_t* engine) {
+    if (!engine || !engine->is_running || engine->incoming_queue_size == 0) {
+        return NULL;
+    }
+    
+    // Return first message from queue
+    dist_message_t* message = engine->incoming_queue[0];
+    
+    // Shift queue
+    for (size_t i = 1; i < engine->incoming_queue_size; i++) {
+        engine->incoming_queue[i - 1] = engine->incoming_queue[i];
+    }
+    engine->incoming_queue_size--;
+    
+    if (message) {
+        engine->total_messages_received++;
+        message->receive_time = (uint64_t)time(NULL);
+    }
+    
+    return message;
+}
+
+// Send cognitive tensor
+bool dist_comm_send_cognitive_tensor(
+    dist_comm_engine_t* engine,
+    uint64_t receiver_id,
+    struct ggml_tensor* tensor,
+    uint32_t attention_level) {
+    
+    if (!engine || !tensor) return false;
+    
+    // Create tensor payload (simplified)
+    struct {
+        uint32_t attention_level;
+        int64_t dimensions[4];
+        uint32_t element_count;
+        uint32_t data_size;
+        // Followed by tensor data
+    } tensor_payload;
+    
+    tensor_payload.attention_level = attention_level;
+    tensor_payload.dimensions[0] = tensor->ne[0];
+    tensor_payload.dimensions[1] = tensor->ne[1];
+    tensor_payload.dimensions[2] = tensor->ne[2];
+    tensor_payload.dimensions[3] = tensor->ne[3];
+    tensor_payload.element_count = (uint32_t)ggml_nelements(tensor);
+    tensor_payload.data_size = (uint32_t)ggml_nbytes(tensor);
+    
+    // Create message with tensor metadata (actual tensor data would follow)
+    dist_message_t* message = dist_comm_create_message(
+        DIST_MSG_COGNITIVE_TENSOR,
+        engine->local_agent_id,
+        receiver_id,
+        &tensor_payload,
+        sizeof(tensor_payload));
+    
+    if (!message) return false;
+    
+    bool success = dist_comm_send_message(engine, message);
+    dist_comm_free_message(message);
+    
+    if (success) {
+        printf("Sent cognitive tensor to agent %lu (attention: %u, elements: %u)\n",
+               receiver_id, attention_level, tensor_payload.element_count);
     }
     
     return success;
 }
 
-// Send attention update to target agent
-bool distributed_comm_send_attention_update(
-    distributed_communication_manager_t* comm,
-    uint32_t target_agent_id,
-    float attention_weights[4],
-    float salience,
-    uint32_t membrane_id,
-    uint64_t workflow_id) {
+// Connect integration components
+bool dist_comm_connect_pln_engine(
+    dist_comm_engine_t* engine,
+    pln_reasoning_engine_t* pln_engine) {
     
-    if (!comm) return false;
+    if (!engine) return false;
     
-    distributed_agent_info_t* target = distributed_comm_find_agent(comm, target_agent_id);
-    if (!target || !target->active) return false;
+    engine->pln_engine = pln_engine;
     
-    // Create attention update packet
-    attention_update_packet_t update_packet = {0};
-    update_packet.agent_id = comm->local_agent_id;
-    update_packet.target_agent_id = target_agent_id;
-    memcpy(update_packet.attention_allocation, attention_weights, sizeof(update_packet.attention_allocation));
-    update_packet.salience_score = salience;
-    update_packet.membrane_id = membrane_id;
-    update_packet.workflow_id = workflow_id;
-    
-    printf("Sending attention update from agent %u to agent %u (salience: %.3f)\n",
-           comm->local_agent_id, target_agent_id, salience);
-    
-    comm->total_bytes_sent += sizeof(attention_update_packet_t);
-    target->message_count++;
+    printf("Connected PLN reasoning engine to distributed communication\n");
     
     return true;
 }
 
-// Send tensor to target agent
-bool distributed_comm_send_tensor(
-    distributed_communication_manager_t* comm,
-    uint32_t target_agent_id,
-    struct ggml_tensor* tensor,
-    const char* tensor_name) {
+bool dist_comm_connect_pattern_engine(
+    dist_comm_engine_t* engine,
+    pattern_engine_t* pattern_engine) {
     
-    if (!comm || !tensor || !tensor_name) return false;
+    if (!engine) return false;
     
-    distributed_agent_info_t* target = distributed_comm_find_agent(comm, target_agent_id);
-    if (!target || !target->active) return false;
+    engine->pattern_engine = pattern_engine;
     
-    // Create tensor exchange packet
-    tensor_exchange_packet_t exchange_packet = {0};
-    exchange_packet.agent_id = comm->local_agent_id;
-    exchange_packet.target_agent_id = target_agent_id;
-    exchange_packet.tensor_id = (uint64_t)tensor;  // Use pointer as ID for now
+    printf("Connected pattern matching engine to distributed communication\n");
     
-    // Copy tensor dimensions
-    for (int i = 0; i < 4 && i < GGML_MAX_DIMS; i++) {
-        exchange_packet.tensor_dims[i] = (uint32_t)tensor->ne[i];
+    return true;
+}
+
+bool dist_comm_connect_cognitive_kernel(
+    dist_comm_engine_t* engine,
+    ggml_cognitive_kernel_t* cognitive_kernel) {
+    
+    if (!engine) return false;
+    
+    engine->cognitive_kernel = cognitive_kernel;
+    
+    printf("Connected cognitive kernel to distributed communication\n");
+    
+    return true;
+}
+
+// Get network performance metrics
+bool dist_comm_get_network_metrics(
+    dist_comm_engine_t* engine,
+    float* average_latency,
+    float* message_loss_rate,
+    float* bandwidth_utilization) {
+    
+    if (!engine) return false;
+    
+    // Calculate metrics from connection statistics
+    float total_latency = 0.0f;
+    size_t active_connections = 0;
+    
+    for (size_t i = 0; i < engine->connection_count; i++) {
+        if (engine->connections[i].is_active) {
+            total_latency += engine->connections[i].average_latency;
+            active_connections++;
+        }
     }
     
-    exchange_packet.tensor_type = (uint32_t)tensor->type;
-    exchange_packet.data_size = (uint32_t)ggml_nbytes(tensor);
-    strncpy(exchange_packet.tensor_name, tensor_name, sizeof(exchange_packet.tensor_name) - 1);
+    if (average_latency) {
+        *average_latency = (active_connections > 0) ? 
+            total_latency / (float)active_connections : 0.0f;
+    }
     
-    printf("Sending tensor '%s' from agent %u to agent %u (size: %u bytes)\n",
-           tensor_name, comm->local_agent_id, target_agent_id, exchange_packet.data_size);
+    if (message_loss_rate) {
+        // Simplified calculation
+        uint64_t total_sent = engine->total_messages_sent;
+        uint64_t total_received = engine->total_messages_received;
+        *message_loss_rate = (total_sent > 0) ? 
+            (1.0f - (float)total_received / (float)total_sent) : 0.0f;
+    }
     
-    comm->total_bytes_sent += sizeof(exchange_packet) + exchange_packet.data_size;
-    target->message_count++;
-    
-    return true;
-}
-
-// Send heartbeat to target agent
-bool distributed_comm_send_heartbeat(
-    distributed_communication_manager_t* comm,
-    uint32_t target_agent_id) {
-    
-    if (!comm) return false;
-    
-    distributed_agent_info_t* target = distributed_comm_find_agent(comm, target_agent_id);
-    if (!target) return false;
-    
-    // Create message header for heartbeat
-    message_header_t header = {0};
-    header.msg_type = AGENT_MSG_HEARTBEAT;
-    header.msg_id = generate_message_id();
-    header.from_agent_id = comm->local_agent_id;
-    header.to_agent_id = target_agent_id;
-    header.data_size = 0;
-    header.timestamp = (uint32_t)time(NULL);
-    
-    printf("Sending heartbeat from agent %u to agent %u\n",
-           comm->local_agent_id, target_agent_id);
-    
-    comm->total_bytes_sent += sizeof(header);
-    target->last_heartbeat = header.timestamp;
+    if (bandwidth_utilization) {
+        // Simplified bandwidth calculation
+        *bandwidth_utilization = 0.5f; // Placeholder
+    }
     
     return true;
 }
 
-// Update heartbeats for all agents
-void distributed_comm_update_heartbeats(distributed_communication_manager_t* comm) {
-    if (!comm) return;
+// Print engine status
+void dist_comm_print_status(dist_comm_engine_t* engine) {
+    if (!engine) return;
     
-    uint32_t current_time = (uint32_t)time(NULL);
+    printf("\n=== Distributed Communication Engine Status ===\n");
+    printf("Agent ID: %lu\n", engine->local_agent_id);
+    printf("Hostname: %s:%u\n", engine->local_hostname, engine->local_port);
+    printf("State: %d\n", engine->local_state);
+    printf("Running: %s\n", engine->is_running ? "Yes" : "No");
+    printf("Known agents: %zu/%zu\n", engine->agent_count, engine->agent_capacity);
+    printf("Active connections: %zu/%zu\n", engine->connection_count, engine->connection_capacity);
+    printf("Outgoing queue: %zu/%zu\n", engine->outgoing_queue_size, engine->max_queue_size);
+    printf("Incoming queue: %zu/%zu\n", engine->incoming_queue_size, engine->max_queue_size);
+    printf("Total messages sent: %lu\n", engine->total_messages_sent);
+    printf("Total messages received: %lu\n", engine->total_messages_received);
+    printf("Total bytes sent: %lu\n", engine->total_bytes_sent);
+    printf("Total bytes received: %lu\n", engine->total_bytes_received);
+    printf("Connection attempts: %lu\n", engine->connection_attempts);
+    printf("Successful connections: %lu\n", engine->successful_connections);
     
-    for (size_t i = 0; i < comm->agent_count; i++) {
-        if (comm->known_agents[i].active) {
-            distributed_comm_send_heartbeat(comm, comm->known_agents[i].agent_id);
-        }
+    float success_rate = (engine->connection_attempts > 0) ?
+        (float)engine->successful_connections / (float)engine->connection_attempts : 0.0f;
+    printf("Connection success rate: %.2f%%\n", success_rate * 100.0f);
+    
+    printf("Discovery enabled: %s\n", engine->discovery_enabled ? "Yes" : "No");
+    printf("Auto-connect: %s\n", engine->auto_connect ? "Yes" : "No");
+    printf("==============================================\n\n");
+}
+
+// Print agent list
+void dist_comm_print_agents(dist_comm_engine_t* engine) {
+    if (!engine) return;
+    
+    printf("\n=== Known Agents ===\n");
+    printf("Total agents: %zu\n\n", engine->agent_count);
+    
+    for (size_t i = 0; i < engine->agent_count; i++) {
+        dist_agent_info_t* agent = &engine->agents[i];
         
-        // Mark agents as inactive if no heartbeat for 60 seconds
-        if (current_time - comm->known_agents[i].last_heartbeat > 60) {
-            comm->known_agents[i].active = false;
-            printf("Agent %u marked as inactive (no heartbeat)\n", 
-                   comm->known_agents[i].agent_id);
-        }
-    }
-}
-
-// Create new cognitive network
-uint32_t distributed_comm_create_network(
-    distributed_communication_manager_t* comm,
-    const char* network_name) {
-    
-    if (!comm || comm->network_count >= comm->network_capacity) return 0;
-    
-    cognitive_network_t* network = &comm->networks[comm->network_count];
-    network->network_id = comm->network_count + 1;
-    strncpy(network->network_name, network_name, sizeof(network->network_name) - 1);
-    network->network_name[sizeof(network->network_name) - 1] = '\0';
-    
-    network->agent_capacity = 32;
-    network->agents = calloc(network->agent_capacity, sizeof(distributed_agent_info_t));
-    network->agent_count = 0;
-    network->network_coherence = 0.0f;
-    network->total_messages = 0;
-    
-    comm->network_count++;
-    
-    printf("Created cognitive network %u: %s\n", network->network_id, network_name);
-    return network->network_id;
-}
-
-// Compute network coherence
-float distributed_comm_compute_network_coherence(
-    distributed_communication_manager_t* comm,
-    uint32_t network_id) {
-    
-    if (!comm || network_id == 0 || network_id > comm->network_count) return 0.0f;
-    
-    cognitive_network_t* network = &comm->networks[network_id - 1];
-    if (network->agent_count == 0) return 0.0f;
-    
-    float total_coherence = 0.0f;
-    size_t active_agents = 0;
-    
-    for (size_t i = 0; i < network->agent_count; i++) {
-        if (network->agents[i].active) {
-            total_coherence += network->agents[i].cognitive_coherence;
-            active_agents++;
-        }
+        printf("Agent %zu:\n", i + 1);
+        printf("  ID: %lu\n", agent->agent_id);
+        printf("  Address: %s:%u\n", agent->hostname, agent->port);
+        printf("  State: %d\n", agent->state);
+        printf("  Protocol: %d\n", agent->preferred_protocol);
+        printf("  Capabilities: PLN=%s, Patterns=%s, Tensors=%s, Coordination=%s\n",
+               agent->supports_pln_reasoning ? "Yes" : "No",
+               agent->supports_pattern_matching ? "Yes" : "No",
+               agent->supports_tensor_operations ? "Yes" : "No",
+               agent->supports_coordination ? "Yes" : "No");
+        printf("  Messages sent: %lu\n", agent->message_count_sent);
+        printf("  Messages received: %lu\n", agent->message_count_received);
+        printf("  Average response time: %.2f ms\n", agent->average_response_time);
+        printf("  Reliability score: %.2f\n", agent->reliability_score);
+        printf("  Last heartbeat: %lu\n", agent->last_heartbeat_time);
+        printf("\n");
     }
     
-    float coherence = active_agents > 0 ? total_coherence / active_agents : 0.0f;
-    network->network_coherence = coherence;
-    
-    return coherence;
-}
-
-// Print communication statistics
-void distributed_comm_print_statistics(distributed_communication_manager_t* comm) {
-    if (!comm) return;
-    
-    printf("\n=== Distributed Communication Statistics ===\n");
-    printf("Local agent ID: %u\n", comm->local_agent_id);
-    printf("Local endpoint: %s\n", comm->local_endpoint);
-    printf("Server active: %s\n", comm->server_active ? "Yes" : "No");
-    printf("Known agents: %zu / %zu\n", comm->agent_count, comm->agent_capacity);
-    printf("Active networks: %zu / %zu\n", comm->network_count, comm->network_capacity);
-    printf("Successful connections: %u\n", comm->successful_connections);
-    printf("Failed connections: %u\n", comm->failed_connections);
-    printf("Total bytes sent: %llu\n", (unsigned long long)comm->total_bytes_sent);
-    printf("Total bytes received: %llu\n", (unsigned long long)comm->total_bytes_received);
-    printf("Average network latency: %.3f ms\n", comm->network_latency_avg);
-    printf("Message success rate: %.1f%%\n", comm->message_success_rate * 100.0f);
-    
-    printf("\nRegistered Agents:\n");
-    for (size_t i = 0; i < comm->agent_count; i++) {
-        distributed_agent_info_t* agent = &comm->known_agents[i];
-        printf("  Agent %u (%s): %s - %s (coherence: %.3f, messages: %u)\n",
-               agent->agent_id, agent->agent_name, agent->endpoint,
-               agent->active ? "ACTIVE" : "INACTIVE",
-               agent->cognitive_coherence, agent->message_count);
-    }
-    
-    printf("\nCognitive Networks:\n");
-    for (size_t i = 0; i < comm->network_count; i++) {
-        cognitive_network_t* network = &comm->networks[i];
-        printf("  Network %u (%s): %zu agents, coherence: %.3f, messages: %llu\n",
-               network->network_id, network->network_name, network->agent_count,
-               network->network_coherence, (unsigned long long)network->total_messages);
-    }
-    
-    printf("============================================\n");
-}
-
-// Request workflow participation from target agent  
-bool distributed_comm_request_workflow_participation(
-    distributed_communication_manager_t* comm,
-    uint32_t target_agent_id,
-    uint64_t workflow_id,
-    const char* workflow_description) {
-    
-    if (!comm || !workflow_description) return false;
-    
-    distributed_agent_info_t* target = distributed_comm_find_agent(comm, target_agent_id);
-    if (!target || !target->active) return false;
-    
-    // Create message header for workflow request
-    message_header_t header = {0};
-    header.msg_type = AGENT_MSG_WORKFLOW_REQUEST;
-    header.msg_id = generate_message_id();
-    header.from_agent_id = comm->local_agent_id;
-    header.to_agent_id = target_agent_id;
-    header.data_size = strlen(workflow_description) + 1;
-    header.timestamp = (uint32_t)time(NULL);
-    
-    printf("Requesting workflow participation from agent %u for workflow %llu: %s\n",
-           target_agent_id, (unsigned long long)workflow_id, workflow_description);
-    
-    comm->total_bytes_sent += sizeof(header) + header.data_size;
-    target->message_count++;
-    
-    return true;
-}
-
-// Run connectivity test
-bool distributed_comm_run_connectivity_test(distributed_communication_manager_t* comm) {
-    if (!comm) return false;
-    
-    printf("\n=== Connectivity Test ===\n");
-    printf("Testing connectivity to %zu registered agents...\n", comm->agent_count);
-    
-    bool all_connected = true;
-    for (size_t i = 0; i < comm->agent_count; i++) {
-        distributed_agent_info_t* agent = &comm->known_agents[i];
-        if (agent->agent_id != comm->local_agent_id) {
-            // In a real implementation, this would test actual network connectivity
-            bool connected = agent->active && (time(NULL) - agent->last_heartbeat < 30);
-            printf("  Agent %u (%s): %s\n", 
-                   agent->agent_id, agent->endpoint, 
-                   connected ? "CONNECTED" : "DISCONNECTED");
-            all_connected = all_connected && connected;
-        }
-    }
-    
-    printf("Connectivity test %s\n", all_connected ? "PASSED" : "FAILED");
-    return all_connected;
+    printf("===================\n\n");
 }
