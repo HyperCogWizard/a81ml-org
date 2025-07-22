@@ -264,6 +264,10 @@ set(GGML_PUBLIC_HEADERS
     include/ggml-blas.h
     include/ggml-cann.h
     include/ggml-cognitive-tensor.h
+    include/ggml-cogfluence.h
+    include/ggml-opencog.h
+    include/ggml-distributed-cognitive.h
+    include/ggml-distributed-communication.h
     include/ggml-cpp.h
     include/ggml-cuda.h
     include/ggml-kompute.h

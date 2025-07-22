@@ -133,6 +133,10 @@ typedef struct {
     opencog_atomspace_t* atomspace;
     ggml_cognitive_kernel_t* cognitive_kernel;
     
+    // Distributed communication
+    void* comm_manager;  // Opaque pointer to avoid circular dependency
+    bool real_distributed_mode;
+    
     // P-System membranes
     psystem_membrane_t* membranes;
     size_t membrane_count;
@@ -307,6 +311,24 @@ GGML_API bool hypergraph_tensor_decode(
     size_t* node_count,
     uint64_t** edge_ids,
     size_t* edge_count);
+
+// Distributed communication functions
+GGML_API bool distributed_cognitive_enable_real_communication(
+    distributed_cognitive_architecture_t* arch);
+
+GGML_API bool distributed_cognitive_connect_to_agent(
+    distributed_cognitive_architecture_t* arch,
+    const char* remote_endpoint,
+    const char* agent_name);
+
+GGML_API bool distributed_cognitive_broadcast_state(
+    distributed_cognitive_architecture_t* arch);
+
+GGML_API bool distributed_cognitive_sync_with_network(
+    distributed_cognitive_architecture_t* arch);
+
+GGML_API void distributed_cognitive_print_network_status(
+    distributed_cognitive_architecture_t* arch);
 
 // Utility functions
 GGML_API void distributed_cognitive_print_architecture(
