@@ -31,8 +31,8 @@ static void generate_primes(uint32_t* primes, size_t* count, uint32_t limit) {
 void ggml_init_prime_lookup(ggml_prime_lookup_t* lookup) {
     if (lookup->initialized) return;
     
-    // Generate primes up to a reasonable limit
-    generate_primes(lookup->primes, &lookup->prime_count, 10000);
+    // Generate primes up to a reasonable limit (reduced for performance)
+    generate_primes(lookup->primes, &lookup->prime_count, 1000);
     lookup->initialized = true;
     
     printf("Initialized prime lookup with %zu primes\n", lookup->prime_count);
@@ -96,7 +96,10 @@ static uint32_t parse_tree_expression(const char* expr, size_t* pos) {
         
         return result;
     } else {
-        // Leaf node or atomic expression
+        // Leaf node or atomic expression - advance position to skip current character
+        if (*pos < len) {
+            (*pos)++;
+        }
         return 1;
     }
 }
