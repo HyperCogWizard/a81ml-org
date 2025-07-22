@@ -198,6 +198,7 @@ add_library(ggml-base
             ../include/ggml-opencog.h
             ../include/ggml-moses.h
             ../include/ggml-distributed-cognitive.h
+            ../include/ggml-distributed-communication.h
             ../include/gguf.h
             ggml.c
             ggml.cpp
@@ -209,6 +210,7 @@ add_library(ggml-base
             ggml-opencog.c
             ggml-moses.c
             ggml-distributed-cognitive.c
+            ggml-distributed-communication.c
             ggml-threading.cpp
             ggml-threading.h
             ggml-quants.c
