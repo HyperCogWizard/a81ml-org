@@ -112,6 +112,38 @@ Allocated 0.60 attention to type 3 (total: 0.60/1.00)
 Agent 1751328539001 sent cognitive tensor (type 1, attention 0.80, salience 0.56)
 ```
 
+### PLN Reasoning Engine
+
+The integrated PLN (Probabilistic Logic Networks) reasoning engine provides sophisticated inference capabilities:
+
+```bash
+# Test PLN reasoning functionality
+../bin/test-pln-reasoning
+
+# Run enhanced cognitive agents with PLN
+../bin/cognitive-agents-pln-demo
+```
+
+#### PLN Features:
+- **Advanced Inference Rules**: Modus ponens, deduction, induction, abduction
+- **Forward/Backward Chaining**: Automatic and goal-directed reasoning
+- **Truth Value Propagation**: Uncertainty handling with strength and confidence
+- **Pattern Matching**: Rule discovery and application
+- **Cross-Agent Reasoning**: Collaborative inference between cognitive agents
+
+#### Example PLN Operations:
+```c
+// Modus Ponens: (A, A→B) ⊢ B
+opencog_truth_value_t conclusion = opencog_pln_modus_ponens(premise_a, implication_ab);
+
+// Deduction: (A→B, B→C) ⊢ (A→C)
+opencog_truth_value_t chained = opencog_pln_deduction(ab_implication, bc_implication);
+
+// Reasoning session with forward chaining
+opencog_pln_session_t* session = opencog_pln_session_init(atomspace, 0.7f);
+bool made_inference = opencog_pln_inference_cycle(session);
+```
+
 ## Cognitive Grammar Examples
 
 ### Task Decomposition
@@ -222,7 +254,7 @@ The system tracks various cognitive performance indicators:
 - ✅ Grammar-based task decomposition
 
 ### Phase 2: Advanced Reasoning
-- [ ] PLN reasoning engine integration
+- [x] PLN reasoning engine integration
 - [ ] MOSES optimization system
 - [ ] Advanced pattern matching
 - [ ] Real distributed communication
