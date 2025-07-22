@@ -96,6 +96,19 @@ The demo includes:
 - **Collaborative Reasoning**: Cross-agent knowledge exchange
 - **Attention Management**: Dynamic resource allocation
 
+### MOSES Evolutionary Optimization
+```bash
+# Demonstrates program synthesis and symbolic regression
+../bin/moses-demo
+```
+
+The MOSES demo includes:
+- **Evolutionary Program Synthesis**: Automatic generation of programs through evolution
+- **Symbolic Regression**: Learning mathematical functions from data
+- **Cognitive Integration**: Programs represented in AtomSpace and cognitive tensors
+- **Prime-based Encoding**: Uses Matula-Goebel encoding for program structures
+- **Meta-Optimization**: Self-improving optimization parameters
+
 ### Example Output
 ```
 === Consciousness Exploration Demo ===
@@ -110,6 +123,38 @@ Added knowledge: neuroscience (nodes: 1)
 Simulating consciousness exploration...
 Allocated 0.60 attention to type 3 (total: 0.60/1.00)
 Agent 1751328539001 sent cognitive tensor (type 1, attention 0.80, salience 0.56)
+```
+
+### PLN Reasoning Engine
+
+The integrated PLN (Probabilistic Logic Networks) reasoning engine provides sophisticated inference capabilities:
+
+```bash
+# Test PLN reasoning functionality
+../bin/test-pln-reasoning
+
+# Run enhanced cognitive agents with PLN
+../bin/cognitive-agents-pln-demo
+```
+
+#### PLN Features:
+- **Advanced Inference Rules**: Modus ponens, deduction, induction, abduction
+- **Forward/Backward Chaining**: Automatic and goal-directed reasoning
+- **Truth Value Propagation**: Uncertainty handling with strength and confidence
+- **Pattern Matching**: Rule discovery and application
+- **Cross-Agent Reasoning**: Collaborative inference between cognitive agents
+
+#### Example PLN Operations:
+```c
+// Modus Ponens: (A, A→B) ⊢ B
+opencog_truth_value_t conclusion = opencog_pln_modus_ponens(premise_a, implication_ab);
+
+// Deduction: (A→B, B→C) ⊢ (A→C)
+opencog_truth_value_t chained = opencog_pln_deduction(ab_implication, bc_implication);
+
+// Reasoning session with forward chaining
+opencog_pln_session_t* session = opencog_pln_session_init(atomspace, 0.7f);
+bool made_inference = opencog_pln_inference_cycle(session);
 ```
 
 ## Cognitive Grammar Examples
@@ -222,10 +267,66 @@ The system tracks various cognitive performance indicators:
 - ✅ Grammar-based task decomposition
 
 ### Phase 2: Advanced Reasoning
-- [ ] PLN reasoning engine integration
-- [ ] MOSES optimization system
+- [x] PLN reasoning engine integration
+- [x] MOSES optimization system
 - [ ] Advanced pattern matching
-- [ ] Real distributed communication
+- [x] Real distributed communication
+
+### Real Distributed Communication
+
+The system now supports true network-based cognitive agent communication:
+
+#### Key Features
+- **Agent Discovery**: Automatic registration and discovery of cognitive agents across the network
+- **State Synchronization**: Real-time sharing of cognitive states, attention levels, and performance metrics
+- **Distributed Attention**: Coordinated attention allocation across multiple agents
+- **Tensor Exchange**: Direct sharing of neural tensor data between agents
+- **Workflow Coordination**: Multi-agent collaborative cognitive workflows
+- **Health Monitoring**: Heartbeat system with automatic failover
+
+#### Quick Start
+```bash
+# Build with distributed communication support
+cd ggml
+mkdir build && cd build
+cmake .. -DGGML_RPC=ON
+make -j8
+
+# Run basic distributed communication test
+./bin/basic-test
+
+# Run multi-agent distributed demo (requires separate terminals)
+./bin/real-distributed-demo
+```
+
+#### Network Architecture
+```
+Agent A (localhost:8001) ←→ Agent B (localhost:8002)
+     ↓                              ↓
+ Cognitive State              Cognitive State  
+ Attention Updates           Attention Updates
+ Tensor Exchange             Tensor Exchange
+ Workflow Requests          Workflow Responses
+```
+
+#### Example Usage
+```c
+// Initialize distributed cognitive agent
+distributed_cognitive_architecture_t* agent = 
+    distributed_cognitive_init(ctx, "localhost:8001");
+
+// Enable real distributed communication
+distributed_cognitive_enable_real_communication(agent);
+
+// Connect to remote agent
+distributed_cognitive_connect_to_agent(agent, "localhost:8002", "RemoteAgent");
+
+// Broadcast cognitive state to network
+distributed_cognitive_broadcast_state(agent);
+
+// Synchronize with network
+distributed_cognitive_sync_with_network(agent);
+```
 
 ### Phase 3: Self-Modification
 - [ ] Recursive self-improvement

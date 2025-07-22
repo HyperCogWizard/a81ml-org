@@ -1,4 +1,5 @@
 #include "ggml-distributed-cognitive.h"
+#include "ggml-distributed-communication.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,6 +51,14 @@ distributed_cognitive_architecture_t* distributed_cognitive_init(
         return NULL;
     }
     
+    // Initialize distributed communication manager
+    arch->comm_manager = (void*)distributed_comm_init(ctx, endpoint, arch->agent_id);
+    if (!arch->comm_manager) {
+        printf("Warning: Failed to initialize distributed communication manager\n");
+        // Continue without distributed communication
+    }
+    arch->real_distributed_mode = (arch->comm_manager != NULL);
+    
     // Link systems together
     opencog_link_cogfluence(arch->atomspace, arch->cogfluence);
     
@@ -87,6 +96,12 @@ distributed_cognitive_architecture_t* distributed_cognitive_init(
     printf("Distributed Cognitive Architecture initialized at %s (Agent ID: %u)\n",
            arch->endpoint, arch->agent_id);
     
+    if (arch->real_distributed_mode) {
+        printf("Real distributed communication mode: ENABLED\n");
+    } else {
+        printf("Real distributed communication mode: DISABLED (local simulation)\n");
+    }
+    
     return arch;
 }
 
@@ -98,6 +113,9 @@ void distributed_cognitive_free(distributed_cognitive_architecture_t* arch) {
     if (arch->cogfluence) cogfluence_free(arch->cogfluence);
     if (arch->atomspace) opencog_atomspace_free(arch->atomspace);
     if (arch->cognitive_kernel) ggml_cognitive_kernel_free(arch->cognitive_kernel);
+    
+    // Free distributed communication
+    if (arch->comm_manager) distributed_comm_free((distributed_communication_manager_t*)arch->comm_manager);
     
     // Free membranes
     for (size_t i = 0; i < arch->membrane_count; i++) {
@@ -649,4 +667,127 @@ bool distributed_cognitive_run_test_suite(distributed_cognitive_architecture_t* 
     printf("Test Suite Result: %s\n", all_passed ? "ALL TESTS PASSED" : "SOME TESTS FAILED");
     
     return all_passed;
+}
+
+// Enable real distributed communication
+bool distributed_cognitive_enable_real_communication(
+    distributed_cognitive_architecture_t* arch) {
+    
+    if (!arch || !arch->comm_manager) return false;
+    
+    distributed_communication_manager_t* comm = (distributed_communication_manager_t*)arch->comm_manager;
+    
+    // Start the communication server
+    if (!distributed_comm_start_server(comm)) {
+        printf("Failed to start distributed communication server\n");
+        return false;
+    }
+    
+    arch->real_distributed_mode = true;
+    
+    printf("Real distributed communication enabled for agent %u\n", arch->agent_id);
+    return true;
+}
+
+// Connect to remote agent
+bool distributed_cognitive_connect_to_agent(
+    distributed_cognitive_architecture_t* arch,
+    const char* remote_endpoint,
+    const char* agent_name) {
+    
+    if (!arch || !arch->comm_manager || !remote_endpoint || !agent_name) {
+        return false;
+    }
+    
+    if (!arch->real_distributed_mode) {
+        printf("Real distributed communication not enabled\n");
+        return false;
+    }
+    
+    distributed_communication_manager_t* comm = (distributed_communication_manager_t*)arch->comm_manager;
+    
+    // Register the remote agent
+    if (!distributed_comm_register_agent(comm, remote_endpoint, agent_name)) {
+        printf("Failed to register remote agent at %s\n", remote_endpoint);
+        return false;
+    }
+    
+    printf("Connected to remote agent '%s' at %s\n", agent_name, remote_endpoint);
+    return true;
+}
+
+// Broadcast cognitive state to network
+bool distributed_cognitive_broadcast_state(
+    distributed_cognitive_architecture_t* arch) {
+    
+    if (!arch || !arch->comm_manager) return false;
+    
+    if (!arch->real_distributed_mode) {
+        printf("Real distributed communication not enabled\n");
+        return false;
+    }
+    
+    distributed_communication_manager_t* comm = (distributed_communication_manager_t*)arch->comm_manager;
+    
+    // Update dashboard before broadcasting
+    dashboard_update(arch);
+    
+    // Broadcast cognitive state
+    if (!distributed_comm_broadcast_cognitive_state(comm, arch)) {
+        printf("Failed to broadcast cognitive state\n");
+        return false;
+    }
+    
+    printf("Broadcasted cognitive state to network\n");
+    return true;
+}
+
+// Synchronize with network
+bool distributed_cognitive_sync_with_network(
+    distributed_cognitive_architecture_t* arch) {
+    
+    if (!arch || !arch->comm_manager) return false;
+    
+    if (!arch->real_distributed_mode) {
+        printf("Real distributed communication not enabled\n");
+        return false;
+    }
+    
+    distributed_communication_manager_t* comm = (distributed_communication_manager_t*)arch->comm_manager;
+    
+    // Update heartbeats
+    distributed_comm_update_heartbeats(comm);
+    
+    // Broadcast current state
+    distributed_cognitive_broadcast_state(arch);
+    
+    // In a real implementation, this would also receive and process
+    // messages from other agents
+    
+    printf("Synchronized with distributed cognitive network\n");
+    return true;
+}
+
+// Print network status
+void distributed_cognitive_print_network_status(
+    distributed_cognitive_architecture_t* arch) {
+    
+    if (!arch) return;
+    
+    printf("\n=== Distributed Cognitive Network Status ===\n");
+    printf("Real distributed mode: %s\n", 
+           arch->real_distributed_mode ? "ENABLED" : "DISABLED");
+    
+    if (arch->comm_manager) {
+        distributed_communication_manager_t* comm = (distributed_communication_manager_t*)arch->comm_manager;
+        distributed_comm_print_statistics(comm);
+        
+        // Run connectivity test
+        bool connected = distributed_comm_run_connectivity_test(comm);
+        printf("Network connectivity: %s\n", connected ? "GOOD" : "POOR");
+    } else {
+        printf("Communication manager: NOT INITIALIZED\n");
+    }
+    
+    printf("===========================================\n");
 }

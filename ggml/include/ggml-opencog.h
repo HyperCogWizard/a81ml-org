@@ -163,6 +163,27 @@ GGML_API opencog_truth_value_t opencog_pln_implication(
     opencog_truth_value_t premise,
     opencog_truth_value_t conclusion);
 
+// Enhanced PLN inference rules
+GGML_API opencog_truth_value_t opencog_pln_modus_ponens(
+    opencog_truth_value_t premise_a,
+    opencog_truth_value_t implication_ab);
+
+GGML_API opencog_truth_value_t opencog_pln_deduction(
+    opencog_truth_value_t ab_implication,
+    opencog_truth_value_t bc_implication);
+
+GGML_API opencog_truth_value_t opencog_pln_induction(
+    opencog_truth_value_t specific_case,
+    opencog_truth_value_t general_pattern);
+
+GGML_API opencog_truth_value_t opencog_pln_abduction(
+    opencog_truth_value_t implication_ab,
+    opencog_truth_value_t conclusion_b);
+
+GGML_API opencog_truth_value_t opencog_pln_similarity_inference(
+    opencog_truth_value_t similarity_ab,
+    opencog_truth_value_t implication_bc);
+
 // Attention value operations (ECAN)
 GGML_API void opencog_set_attention_value(
     opencog_atomspace_t* atomspace,
@@ -258,6 +279,42 @@ GGML_API void opencog_save_atomspace(
 GGML_API bool opencog_load_atomspace(
     opencog_atomspace_t* atomspace,
     const char* filename);
+
+// PLN Reasoning Engine Functions
+GGML_API bool opencog_pln_forward_chain(
+    opencog_atomspace_t* atomspace,
+    uint64_t premise_atoms[],
+    size_t premise_count,
+    void* rule);
+
+GGML_API bool opencog_pln_backward_chain(
+    opencog_atomspace_t* atomspace,
+    uint64_t goal_atom_id,
+    opencog_truth_value_t desired_tv);
+
+GGML_API size_t opencog_pln_find_patterns(
+    opencog_atomspace_t* atomspace,
+    opencog_atom_type_t pattern_type,
+    uint64_t* matching_atoms,
+    size_t max_matches);
+
+// PLN reasoning session management
+typedef struct {
+    opencog_atomspace_t* atomspace;
+    uint64_t inference_count;
+    uint64_t successful_count;
+    float accuracy_threshold;
+    bool forward_chaining_enabled;
+    bool backward_chaining_enabled;
+} opencog_pln_session_t;
+
+GGML_API opencog_pln_session_t* opencog_pln_session_init(
+    opencog_atomspace_t* atomspace,
+    float accuracy_threshold);
+
+GGML_API bool opencog_pln_inference_cycle(opencog_pln_session_t* session);
+
+GGML_API void opencog_pln_session_free(opencog_pln_session_t* session);
 
 #ifdef __cplusplus
 }

@@ -14,6 +14,7 @@
 
 #include "ggml.h"
 #include "ggml-rpc.h"
+#include "ggml-distributed-cognitive.h"
 #include "ggml-opencog.h"
 #include "ggml-cognitive-tensor.h"
 #include "ggml-pln-reasoning.h"
@@ -34,6 +35,10 @@ extern "C" {
 #define DIST_COMM_DISCOVERY_PORT 8001
 #define DIST_COMM_HEARTBEAT_INTERVAL 30 // seconds
 
+// Additional configuration from master integration
+#define DISTRIBUTED_COMM_MAX_NETWORKS 8
+#define DISTRIBUTED_COMM_BUFFER_SIZE 8192
+
 // Message types
 typedef enum {
     DIST_MSG_HEARTBEAT = 1,       // Agent alive signal
@@ -48,7 +53,14 @@ typedef enum {
     DIST_MSG_COORDINATION = 10,   // Multi-agent coordination
     DIST_MSG_CONSENSUS = 11,      // Consensus protocol
     DIST_MSG_ERROR = 12,          // Error notification
-    DIST_MSG_DEBUG = 13           // Debug information
+    DIST_MSG_DEBUG = 13,          // Debug information
+    // Additional message types from master integration
+    AGENT_MSG_REGISTER = 14,      // Agent registration
+    AGENT_MSG_UNREGISTER = 15,    // Agent deregistration
+    AGENT_MSG_COGNITIVE_STATE = 16, // Cognitive state updates
+    AGENT_MSG_TENSOR_EXCHANGE = 17, // Direct tensor exchange
+    AGENT_MSG_WORKFLOW_REQUEST = 18, // Workflow delegation
+    AGENT_MSG_MEMBRANE_SYNC = 19   // Membrane synchronization
 } dist_message_type_t;
 
 // Communication protocols
@@ -71,6 +83,27 @@ typedef enum {
     DIST_AGENT_DISCONNECTED = 6,
     DIST_AGENT_ERROR = 7
 } dist_agent_state_t;
+
+// Cognitive state packet for network transmission (integrated from master)
+typedef struct {
+    uint32_t agent_id;
+    uint32_t timestamp;
+    float coherence_level;
+    float attention_values[4];  // Memory, Reasoning, Communication, Self-modification
+    uint32_t active_workflows;
+    uint32_t tensor_count;
+    float cognitive_load;
+    char endpoint[256];
+} cognitive_state_packet_t;
+
+// Attention update message (integrated from master)
+typedef struct {
+    uint32_t agent_id;
+    uint32_t target_concept_id;
+    float attention_delta;
+    uint32_t update_type;  // 0=increment, 1=set, 2=decay
+    uint32_t timestamp;
+} attention_update_packet_t;
 
 // Message header structure
 typedef struct {

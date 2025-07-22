@@ -268,6 +268,123 @@ opencog_truth_value_t opencog_pln_not(opencog_truth_value_t tv) {
     return result;
 }
 
+// PLN Implication operation (A → B)
+opencog_truth_value_t opencog_pln_implication(
+    opencog_truth_value_t premise,
+    opencog_truth_value_t conclusion) {
+    
+    opencog_truth_value_t result;
+    
+    // PLN implication formula: if s_A is high, then s_B should be high
+    // Strength of implication based on conditional probability
+    float conditional_strength = 0.0f;
+    if (premise.strength > 0.0f) {
+        conditional_strength = conclusion.strength / premise.strength;
+        conditional_strength = fminf(1.0f, conditional_strength);
+    }
+    
+    result.strength = conditional_strength;
+    result.confidence = fminf(premise.confidence, conclusion.confidence);
+    result.count = fminf(premise.count, conclusion.count);
+    
+    return result;
+}
+
+// PLN Modus Ponens: (A, A→B) ⊢ B
+opencog_truth_value_t opencog_pln_modus_ponens(
+    opencog_truth_value_t premise_a,
+    opencog_truth_value_t implication_ab) {
+    
+    opencog_truth_value_t result;
+    
+    // Modus ponens strength: s_A * s_(A→B)
+    result.strength = premise_a.strength * implication_ab.strength;
+    
+    // Confidence combination with geometric mean
+    result.confidence = sqrtf(premise_a.confidence * implication_ab.confidence);
+    
+    // Count as minimum of premises
+    result.count = fminf(premise_a.count, implication_ab.count);
+    
+    return result;
+}
+
+// PLN Deduction: (A→B, B→C) ⊢ (A→C)
+opencog_truth_value_t opencog_pln_deduction(
+    opencog_truth_value_t ab_implication,
+    opencog_truth_value_t bc_implication) {
+    
+    opencog_truth_value_t result;
+    
+    // Deduction strength: transitivity of implications
+    result.strength = ab_implication.strength * bc_implication.strength;
+    
+    // Confidence weakens with chaining
+    result.confidence = ab_implication.confidence * bc_implication.confidence * 0.9f;
+    
+    // Count combination
+    result.count = fminf(ab_implication.count, bc_implication.count);
+    
+    return result;
+}
+
+// PLN Induction: (A→B, A) ⊢ B (with uncertainty)
+opencog_truth_value_t opencog_pln_induction(
+    opencog_truth_value_t specific_case,
+    opencog_truth_value_t general_pattern) {
+    
+    opencog_truth_value_t result;
+    
+    // Induction strength based on pattern matching
+    result.strength = specific_case.strength * general_pattern.strength * 0.8f; // Uncertainty factor
+    
+    // Lower confidence due to inductive uncertainty
+    result.confidence = sqrtf(specific_case.confidence * general_pattern.confidence) * 0.7f;
+    
+    // Evidence count affects reliability
+    result.count = (specific_case.count + general_pattern.count) / 2.0f;
+    
+    return result;
+}
+
+// PLN Abduction: (A→B, B) ⊢ A (hypothetical)
+opencog_truth_value_t opencog_pln_abduction(
+    opencog_truth_value_t implication_ab,
+    opencog_truth_value_t conclusion_b) {
+    
+    opencog_truth_value_t result;
+    
+    // Abduction strength: reverse inference with uncertainty
+    result.strength = conclusion_b.strength * implication_ab.strength * 0.6f; // High uncertainty
+    
+    // Low confidence due to hypothetical nature
+    result.confidence = sqrtf(implication_ab.confidence * conclusion_b.confidence) * 0.5f;
+    
+    // Count reflects hypothesis quality
+    result.count = fminf(implication_ab.count, conclusion_b.count) * 0.8f;
+    
+    return result;
+}
+
+// PLN Similarity inference: if A~B and B→C, then A→C (with strength reduction)
+opencog_truth_value_t opencog_pln_similarity_inference(
+    opencog_truth_value_t similarity_ab,
+    opencog_truth_value_t implication_bc) {
+    
+    opencog_truth_value_t result;
+    
+    // Similarity-based inference with strength reduction
+    result.strength = similarity_ab.strength * implication_bc.strength * 0.85f;
+    
+    // Confidence combination
+    result.confidence = sqrtf(similarity_ab.confidence * implication_bc.confidence);
+    
+    // Count preservation
+    result.count = fminf(similarity_ab.count, implication_bc.count);
+    
+    return result;
+}
+
 // Set truth value
 void opencog_set_truth_value(
     opencog_atomspace_t* atomspace,
@@ -536,4 +653,210 @@ void opencog_print_atomspace_statistics(opencog_atomspace_t* atomspace) {
     }
     
     printf("=====================================\n");
+}
+
+// PLN Reasoning Engine Functions
+
+// PLN forward chaining: apply rules to derive new knowledge
+bool opencog_pln_forward_chain(
+    opencog_atomspace_t* atomspace,
+    uint64_t premise_atoms[],
+    size_t premise_count,
+    void* rule) {
+    
+    if (!atomspace || !premise_atoms || premise_count == 0) {
+        return false;
+    }
+    
+    // Simple forward chaining: for now just apply basic modus ponens pattern
+    if (premise_count >= 2) {
+        opencog_truth_value_t premise1_tv = opencog_get_truth_value(atomspace, premise_atoms[0]);
+        opencog_truth_value_t premise2_tv = opencog_get_truth_value(atomspace, premise_atoms[1]);
+        
+        // Apply modus ponens if appropriate
+        opencog_truth_value_t conclusion_tv = opencog_pln_modus_ponens(premise1_tv, premise2_tv);
+        
+        // Create conclusion atom if rule application was successful
+        if (conclusion_tv.confidence > 0.1f) { // Minimum confidence threshold
+            char conclusion_name[OPENCOG_MAX_ATOM_NAME];
+            snprintf(conclusion_name, OPENCOG_MAX_ATOM_NAME, "Inferred_%lu", 
+                     atomspace->total_inferences);
+            
+            uint64_t conclusion_id = opencog_add_node(atomspace, OPENCOG_CONCEPT_NODE, conclusion_name);
+            if (conclusion_id > 0) {
+                opencog_set_truth_value(atomspace, conclusion_id, 
+                                        conclusion_tv.strength, conclusion_tv.confidence);
+                
+                atomspace->total_inferences++;
+                if (conclusion_tv.strength > 0.7f && conclusion_tv.confidence > 0.7f) {
+                    atomspace->successful_inferences++;
+                }
+                
+                atomspace->reasoning_accuracy = (float)atomspace->successful_inferences / 
+                                               (float)atomspace->total_inferences;
+                
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+
+// PLN backward chaining: find premises that could lead to a goal
+bool opencog_pln_backward_chain(
+    opencog_atomspace_t* atomspace,
+    uint64_t goal_atom_id,
+    opencog_truth_value_t desired_tv) {
+    
+    if (!atomspace || goal_atom_id == 0) return false;
+    
+    opencog_atom_t* goal_atom = opencog_get_atom(atomspace, goal_atom_id);
+    if (!goal_atom) return false;
+    
+    // Simple backward chaining: look for atoms that could imply the goal
+    for (size_t i = 0; i < atomspace->atom_count; i++) {
+        if (atomspace->atoms[i].is_deleted) continue;
+        
+        opencog_atom_t* potential_premise = &atomspace->atoms[i];
+        
+        // Check if this atom could be a premise for the goal
+        if (potential_premise->type == OPENCOG_IMPLICATION_LINK ||
+            potential_premise->type == OPENCOG_INHERITANCE_LINK) {
+            
+            // Check if this implication could lead to our goal
+            for (size_t j = 0; j < potential_premise->outgoing_count; j++) {
+                if (potential_premise->outgoing[j] == goal_atom_id) {
+                    // Found a potential reasoning path
+                    opencog_truth_value_t premise_tv = potential_premise->truth_value;
+                    
+                    // Apply modus ponens if we can establish the antecedent
+                    if (premise_tv.strength >= desired_tv.strength * 0.8f &&
+                        premise_tv.confidence >= desired_tv.confidence * 0.8f) {
+                        
+                        // Update goal atom's truth value
+                        opencog_truth_value_t new_tv = opencog_pln_modus_ponens(
+                            premise_tv, potential_premise->truth_value);
+                        
+                        opencog_set_truth_value(atomspace, goal_atom_id, 
+                                                new_tv.strength, new_tv.confidence);
+                        
+                        atomspace->total_inferences++;
+                        if (new_tv.strength >= desired_tv.strength) {
+                            atomspace->successful_inferences++;
+                        }
+                        
+                        atomspace->reasoning_accuracy = (float)atomspace->successful_inferences / 
+                                                       (float)atomspace->total_inferences;
+                        
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    
+    return false;
+}
+
+// PLN pattern matching for rule discovery
+size_t opencog_pln_find_patterns(
+    opencog_atomspace_t* atomspace,
+    opencog_atom_type_t pattern_type,
+    uint64_t* matching_atoms,
+    size_t max_matches) {
+    
+    if (!atomspace || !matching_atoms) return 0;
+    
+    size_t match_count = 0;
+    
+    for (size_t i = 0; i < atomspace->atom_count && match_count < max_matches; i++) {
+        if (atomspace->atoms[i].is_deleted) continue;
+        
+        if (atomspace->atoms[i].type == pattern_type) {
+            matching_atoms[match_count++] = atomspace->atoms[i].atom_id;
+        }
+    }
+    
+    return match_count;
+}
+
+// PLN inference session management
+// (Structure definition is in the header file)
+
+// Initialize PLN reasoning session
+opencog_pln_session_t* opencog_pln_session_init(
+    opencog_atomspace_t* atomspace,
+    float accuracy_threshold) {
+    
+    if (!atomspace) return NULL;
+    
+    opencog_pln_session_t* session = malloc(sizeof(opencog_pln_session_t));
+    if (!session) return NULL;
+    
+    session->atomspace = atomspace;
+    session->inference_count = 0;
+    session->successful_count = 0;
+    session->accuracy_threshold = accuracy_threshold;
+    session->forward_chaining_enabled = true;
+    session->backward_chaining_enabled = true;
+    
+    printf("PLN reasoning session initialized with accuracy threshold: %.2f\n", 
+           accuracy_threshold);
+    
+    return session;
+}
+
+// Run PLN inference cycle
+bool opencog_pln_inference_cycle(opencog_pln_session_t* session) {
+    if (!session || !session->atomspace) return false;
+    
+    bool made_inference = false;
+    
+    // Forward chaining: look for applicable rules
+    if (session->forward_chaining_enabled) {
+        // Find implication links to apply modus ponens
+        uint64_t implications[64];
+        size_t impl_count = opencog_pln_find_patterns(
+            session->atomspace, OPENCOG_IMPLICATION_LINK, implications, 64);
+        
+        for (size_t i = 0; i < impl_count; i++) {
+            opencog_atom_t* impl_atom = opencog_get_atom(session->atomspace, implications[i]);
+            if (!impl_atom || impl_atom->outgoing_count < 2) continue;
+            
+            // Look for antecedent in atomspace
+            uint64_t antecedent_id = impl_atom->outgoing[0];
+            uint64_t consequent_id = impl_atom->outgoing[1];
+            
+            opencog_atom_t* antecedent = opencog_get_atom(session->atomspace, antecedent_id);
+            if (antecedent && antecedent->truth_value.strength > 0.6f) {
+                // Apply modus ponens
+                opencog_truth_value_t conclusion = opencog_pln_modus_ponens(
+                    antecedent->truth_value, impl_atom->truth_value);
+                
+                opencog_set_truth_value(session->atomspace, consequent_id,
+                                        conclusion.strength, conclusion.confidence);
+                
+                session->inference_count++;
+                if (conclusion.strength > session->accuracy_threshold) {
+                    session->successful_count++;
+                }
+                
+                made_inference = true;
+            }
+        }
+    }
+    
+    return made_inference;
+}
+
+// Free PLN reasoning session
+void opencog_pln_session_free(opencog_pln_session_t* session) {
+    if (session) {
+        printf("PLN session completed: %lu inferences, %lu successful (%.2f%% accuracy)\n",
+               session->inference_count, session->successful_count,
+               session->inference_count > 0 ? 
+               (float)session->successful_count / (float)session->inference_count * 100.0f : 0.0f);
+        free(session);
+    }
 }
