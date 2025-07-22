@@ -30,6 +30,7 @@ if (NOT GGML_BACKEND_DL)
     add_subdirectory(cognitive-agents)
     add_subdirectory(cognitive-tensor-demo)
     add_subdirectory(distributed-cognitive-demo)
+    add_subdirectory(phase2-advanced-reasoning)
 endif()
 
 if (GGML_METAL)
