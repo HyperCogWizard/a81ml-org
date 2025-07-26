@@ -57,6 +57,12 @@ make -j8
    - Memory pool allocation and string utilities
    - Comprehensive error handling and validation
 
+6. **Component System**: Formal Dependency Management
+   - YAML-based component specifications
+   - Automatic dependency validation at build time
+   - Circular dependency detection and prevention
+   - Build order enforcement and error handling
+
 ### 🌐 Distributed Communication
 
 The system leverages and extends the existing ggml RPC infrastructure:
@@ -88,6 +94,7 @@ The system leverages and extends the existing ggml RPC infrastructure:
 - [**Implementation Guide**](docs/implementation-guide.md) - Practical development guide
 - [**Cognitive Grammar Examples**](docs/cognitive-grammar-examples.md) - Grammar system usage
 - [**CogUtil Library**](docs/cogutil.md) - OpenCog utility library for foundation services
+- [**Component Dependencies**](components/README.md) - Component dependency system and specifications
 
 ## Demo Applications
 

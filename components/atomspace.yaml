@@ -1,0 +1,65 @@
+name: atomspace
+version: "1.0.0"
+type: cognitive-component
+description: "OpenCog AtomSpace implementation with hypergraph knowledge representation"
+
+# Component location and files
+source:
+  header: "../ggml/include/ggml-opencog.h"
+  implementation: "../ggml/src/ggml-opencog.c"
+  
+# Explicit dependencies
+requires:
+  - cogutil
+
+# Component interface
+provides:
+  - opencog_atomspace_t
+  - opencog_atom_t
+  - opencog_truth_value_t
+  - opencog_attention_value_t
+
+# Functionality exposed
+functions:
+  - opencog_atomspace_init
+  - opencog_atomspace_free
+  - opencog_add_node
+  - opencog_add_link
+  - opencog_get_atom
+  - opencog_delete_atom
+  - opencog_set_truth_value
+  - opencog_get_truth_value
+  - opencog_pln_modus_ponens
+  - opencog_pln_deduction
+  - opencog_pln_induction
+  - opencog_pln_abduction
+
+# Build requirements
+build:
+  cmake_target: ggml-base
+  compile_definitions:
+    - GGML_USE_OPENCOG
+  link_libraries:
+    - m
+    - pthread
+
+# Testing
+tests:
+  - test_atomspace_basic
+  - test_pln_reasoning
+  - test_attention_economy
+
+# Documentation
+documentation:
+  - "docs/cogutil.md"
+  - "README.md"
+
+# Metadata
+tags:
+  - opencog
+  - atomspace
+  - knowledge-representation
+  - cognitive-architecture
+  - hypergraph
+  - pln
+  - reasoning
