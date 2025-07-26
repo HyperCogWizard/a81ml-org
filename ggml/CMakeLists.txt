@@ -231,6 +231,43 @@ find_package(Threads REQUIRED)
 include(GNUInstallDirs)
 
 #
+# validate component dependencies
+#
+
+# Find Python for component validation
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+    # Add custom target to validate component dependencies
+    add_custom_target(validate-components
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/validate-components.py 
+                --components-dir ${CMAKE_CURRENT_SOURCE_DIR}/../components 
+                --validate --check-files
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Validating component dependencies..."
+        VERBATIM
+    )
+    
+    # Run validation during configure phase for immediate feedback
+    execute_process(
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/validate-components.py 
+                --components-dir ${CMAKE_CURRENT_SOURCE_DIR}/../components 
+                --validate
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        RESULT_VARIABLE VALIDATION_RESULT
+        OUTPUT_VARIABLE VALIDATION_OUTPUT
+        ERROR_VARIABLE VALIDATION_ERROR
+    )
+    
+    if(NOT VALIDATION_RESULT EQUAL 0)
+        message(FATAL_ERROR "Component dependency validation failed!\n${VALIDATION_OUTPUT}\n${VALIDATION_ERROR}")
+    endif()
+    
+    message(STATUS "Component dependency validation passed")
+else()
+    message(WARNING "Python3 not found - skipping component dependency validation")
+endif()
+
+#
 # build the library
 #
 
