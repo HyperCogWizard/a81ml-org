@@ -1,0 +1,71 @@
+name: atomspace-rocks
+version: "1.0.0"
+type: storage-component
+description: "RocksDB-based persistent storage backend for OpenCog AtomSpace"
+
+# Component location and files
+source:
+  header: "../ggml/include/ggml-atomspace-rocks.h"
+  implementation: "../ggml/src/ggml-atomspace-rocks.c"
+  
+# Explicit dependencies
+requires:
+  - atomspace
+
+# Component interface
+provides:
+  - opencog_atomspace_rocks_t
+  - opencog_rocks_storage_node_t
+  - opencog_rocks_storage_link_t
+  - opencog_rocks_transaction_t
+
+# Functionality exposed
+functions:
+  - opencog_atomspace_rocks_init
+  - opencog_atomspace_rocks_free
+  - opencog_atomspace_rocks_open
+  - opencog_atomspace_rocks_close
+  - opencog_atomspace_rocks_store_atom
+  - opencog_atomspace_rocks_load_atom
+  - opencog_atomspace_rocks_delete_atom
+  - opencog_atomspace_rocks_store_atomspace
+  - opencog_atomspace_rocks_load_atomspace
+  - opencog_atomspace_rocks_begin_transaction
+  - opencog_atomspace_rocks_commit_transaction
+  - opencog_atomspace_rocks_rollback_transaction
+  - opencog_atomspace_rocks_compact
+  - opencog_atomspace_rocks_backup
+  - opencog_atomspace_rocks_restore
+
+# Build requirements
+build:
+  cmake_target: ggml-base
+  compile_definitions:
+    - GGML_USE_ROCKSDB
+    - GGML_USE_ATOMSPACE_ROCKS
+  link_libraries:
+    - m
+    - pthread
+    - rocksdb
+
+# Testing
+tests:
+  - test_atomspace_rocks_basic
+  - test_atomspace_rocks_persistence
+  - test_atomspace_rocks_transactions
+  - test_atomspace_rocks_performance
+
+# Documentation
+documentation:
+  - "docs/atomspace-rocks.md"
+  - "README.md"
+
+# Metadata
+tags:
+  - storage
+  - rocksdb
+  - persistence
+  - atomspace
+  - backend
+  - database
+  - cognitive-architecture
