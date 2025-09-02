@@ -1,5 +1,5 @@
-#include "ggml-distributed-cognitive.h"
-#include "ggml-distributed-communication.h"
+#include "includes/ggml-distributed-cognitive.h"
+// #include "ggml-distributed-communication.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
