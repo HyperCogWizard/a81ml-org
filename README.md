@@ -25,6 +25,12 @@ make -j8
 
 # Run the cognitive agents demo
 ./bin/cognitive-agents-demo
+
+# Run recursive self-improvement demo (NEW!)
+./bin/recursive-self-improvement-demo
+
+# Run comprehensive recursive self-improvement tests
+./bin/test-recursive-self-improvement
 ```
 
 ## Architecture Components
@@ -73,10 +79,14 @@ The system leverages and extends the existing ggml RPC infrastructure:
 
 ## Key Features
 
-### 🔄 Recursive Intelligence
+### 🔄 Recursive Intelligence & Self-Improvement
 - Agents model other agents' cognitive states
 - Meta-reasoning about reasoning processes
-- Self-improvement through recursive optimization
+- **Recursive self-improvement** - System optimizes its own optimization algorithms
+- **Intelligence bootstrapping** - Creates meta-meta optimization loops
+- **Self-modifying parameters** - Dynamic learning rate and attention adaptation
+- **Meta-optimization** - Optimization algorithms that optimize other optimization algorithms
+- **Performance-based architecture adaptation** - System modifies its own structure
 
 ### 🏗️ Emergent Architecture
 - Spontaneous role specialization
@@ -92,6 +102,7 @@ The system leverages and extends the existing ggml RPC infrastructure:
 
 - [**Distributed Cognitive Architecture**](docs/distributed-cognitive-architecture.md) - Complete architectural overview
 - [**Implementation Guide**](docs/implementation-guide.md) - Practical development guide
+- [**Recursive Self-Improvement**](docs/recursive-self-improvement.md) - **NEW!** Complete guide to recursive self-improvement capabilities
 - [**Cognitive Grammar Examples**](docs/cognitive-grammar-examples.md) - Grammar system usage
 - [**CogUtil Library**](docs/cogutil.md) - OpenCog utility library for foundation services
 - [**Component Dependencies**](components/README.md) - Component dependency system and specifications
@@ -343,8 +354,11 @@ distributed_cognitive_sync_with_network(agent);
 ```
 
 ### Phase 3: Self-Modification
-- [ ] Recursive self-improvement
-- [ ] Automated architecture evolution
+- [x] **Recursive self-improvement** - System optimizes its own optimization algorithms
+- [x] **Meta-optimization capabilities** - Optimization loops that optimize other optimization loops
+- [x] **Intelligence bootstrapping** - Uses current intelligence to create better intelligence
+- [x] **Self-modifying learning parameters** - Dynamic adaptation of learning rates and attention allocation
+- [x] **Automated architecture evolution** - System modifies its own cognitive structure
 - [ ] Meta-meta-reasoning capabilities
 - [ ] Emergent behavior analysis
 
