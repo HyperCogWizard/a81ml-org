@@ -124,6 +124,52 @@ typedef struct {
     bool converged;
 } self_optimization_loop_t;
 
+// Recursive self-improvement structures
+typedef enum {
+    RECURSIVE_TARGET_OPTIMIZATION_ALGORITHM = 1,
+    RECURSIVE_TARGET_LEARNING_RATE = 2,
+    RECURSIVE_TARGET_ATTENTION_ALLOCATION = 3,
+    RECURSIVE_TARGET_REASONING_PATTERNS = 4,
+    RECURSIVE_TARGET_MEMORY_ORGANIZATION = 5
+} recursive_improvement_target_t;
+
+typedef struct {
+    uint32_t improvement_id;
+    recursive_improvement_target_t target_type;
+    char target_description[128];
+    
+    // Meta-optimization state
+    uint32_t meta_loop_id;
+    float meta_performance_history[10];
+    size_t meta_history_count;
+    
+    // Recursive depth tracking
+    uint32_t recursion_depth;
+    uint32_t max_recursion_depth;
+    
+    // Self-modification state
+    float original_parameters[16];
+    float current_parameters[16];
+    float best_parameters[16];
+    size_t parameter_count;
+    
+    // Performance tracking
+    float baseline_meta_performance;
+    float current_meta_performance;
+    float best_meta_performance;
+    uint64_t improvement_cycles;
+    
+    // Bootstrapping state
+    bool bootstrapping_active;
+    float bootstrap_multiplier;
+    uint32_t bootstrap_iterations;
+    
+    // State flags
+    bool active;
+    bool converged;
+    bool self_modifying;
+} recursive_improvement_loop_t;
+
 // Distributed cognitive architecture
 typedef struct {
     // Core systems
@@ -150,9 +196,15 @@ typedef struct {
     size_t optimization_loop_count;
     size_t optimization_loop_capacity;
     
+    // Recursive self-improvement loops
+    recursive_improvement_loop_t* recursive_improvement_loops;
+    size_t recursive_improvement_count;
+    size_t recursive_improvement_capacity;
+    
     // System state
     bool initialized;
     bool self_optimization_active;
+    bool recursive_improvement_active;
     uint64_t system_time;
     
     // Performance metrics
@@ -329,6 +381,37 @@ GGML_API bool distributed_cognitive_sync_with_network(
 
 GGML_API void distributed_cognitive_print_network_status(
     distributed_cognitive_architecture_t* arch);
+
+// Recursive self-improvement functions
+GGML_API uint32_t recursive_improvement_create_loop(
+    distributed_cognitive_architecture_t* arch,
+    recursive_improvement_target_t target_type,
+    const char* target_description);
+
+GGML_API bool recursive_improvement_run_cycle(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t improvement_id);
+
+GGML_API bool recursive_improvement_bootstrap_intelligence(
+    distributed_cognitive_architecture_t* arch);
+
+GGML_API bool recursive_improvement_optimize_optimizer(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t base_optimization_loop_id);
+
+GGML_API bool recursive_improvement_self_modify_reasoning(
+    distributed_cognitive_architecture_t* arch);
+
+GGML_API bool recursive_improvement_adapt_architecture(
+    distributed_cognitive_architecture_t* arch,
+    float performance_feedback);
+
+GGML_API void recursive_improvement_print_status(
+    distributed_cognitive_architecture_t* arch);
+
+GGML_API float recursive_improvement_measure_meta_performance(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t improvement_id);
 
 // Utility functions
 GGML_API void distributed_cognitive_print_architecture(

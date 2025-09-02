@@ -50,6 +50,38 @@ target_link_libraries(real-distributed-demo
     m  # Math library for sin/cos functions
 )
 
+# Add recursive self-improvement demo
+add_executable(recursive-self-improvement-demo
+    recursive-self-improvement-demo.c
+)
+
+target_include_directories(recursive-self-improvement-demo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(recursive-self-improvement-demo
+    ggml-base
+    ${CMAKE_THREAD_LIBS_INIT}
+    m  # Math library for sin/cos functions
+)
+
+# Add recursive self-improvement test
+add_executable(test-recursive-self-improvement
+    test-recursive-self-improvement.c
+)
+
+target_include_directories(test-recursive-self-improvement PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(test-recursive-self-improvement
+    ggml-base
+    ${CMAKE_THREAD_LIBS_INIT}
+    m  # Math library for sin/cos functions
+)
+
 # Add comprehensive integration tests
 add_executable(test-distributed-cognitive-integration
     test-integration.c
@@ -80,6 +112,14 @@ set_target_properties(real-distributed-demo PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
+set_target_properties(recursive-self-improvement-demo PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
+set_target_properties(test-recursive-self-improvement PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
 set_target_properties(test-distributed-cognitive-integration PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
@@ -94,6 +134,14 @@ target_compile_definitions(distributed-cognitive-demo PRIVATE
 )
 
 target_compile_definitions(real-distributed-demo PRIVATE
+    _GNU_SOURCE
+)
+
+target_compile_definitions(recursive-self-improvement-demo PRIVATE
+    _GNU_SOURCE
+)
+
+target_compile_definitions(test-recursive-self-improvement PRIVATE
     _GNU_SOURCE
 )
 

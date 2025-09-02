@@ -18,6 +18,11 @@ static uint32_t generate_optimization_loop_id(void) {
     return counter++;
 }
 
+static uint32_t generate_improvement_id(void) {
+    static uint32_t counter = 1;
+    return counter++;
+}
+
 // Initialize distributed cognitive architecture
 distributed_cognitive_architecture_t* distributed_cognitive_init(
     struct ggml_context* ctx,
@@ -78,9 +83,15 @@ distributed_cognitive_architecture_t* distributed_cognitive_init(
     arch->optimization_loops = calloc(arch->optimization_loop_capacity, sizeof(self_optimization_loop_t));
     arch->optimization_loop_count = 0;
     
+    // Initialize recursive improvement loops
+    arch->recursive_improvement_capacity = 8;
+    arch->recursive_improvement_loops = calloc(arch->recursive_improvement_capacity, sizeof(recursive_improvement_loop_t));
+    arch->recursive_improvement_count = 0;
+    
     // Initialize system state
     arch->initialized = true;
     arch->self_optimization_active = false;
+    arch->recursive_improvement_active = true;  // Enable recursive self-improvement by default
     arch->system_time = (uint64_t)time(NULL);
     
     // Initialize performance metrics
@@ -147,6 +158,9 @@ void distributed_cognitive_free(distributed_cognitive_architecture_t* arch) {
     
     // Free optimization loops
     free(arch->optimization_loops);
+    
+    // Free recursive improvement loops
+    free(arch->recursive_improvement_loops);
     
     free(arch);
 }
@@ -814,4 +828,476 @@ void distributed_cognitive_print_network_status(
     }
     
     printf("===========================================\n");
+}
+
+// =====================================================
+// RECURSIVE SELF-IMPROVEMENT IMPLEMENTATION
+// =====================================================
+
+// Create recursive improvement loop
+uint32_t recursive_improvement_create_loop(
+    distributed_cognitive_architecture_t* arch,
+    recursive_improvement_target_t target_type,
+    const char* target_description) {
+    
+    if (!arch || !target_description || 
+        arch->recursive_improvement_count >= arch->recursive_improvement_capacity) {
+        return 0;
+    }
+    
+    recursive_improvement_loop_t* loop = &arch->recursive_improvement_loops[arch->recursive_improvement_count];
+    uint32_t improvement_id = generate_improvement_id();
+    
+    // Initialize recursive improvement loop
+    loop->improvement_id = improvement_id;
+    loop->target_type = target_type;
+    strncpy(loop->target_description, target_description, sizeof(loop->target_description) - 1);
+    loop->target_description[sizeof(loop->target_description) - 1] = '\0';
+    
+    // Initialize meta-optimization
+    loop->meta_loop_id = 0;  // Will be created when needed
+    loop->meta_history_count = 0;
+    
+    // Initialize recursion tracking
+    loop->recursion_depth = 0;
+    loop->max_recursion_depth = 5;  // Prevent infinite recursion
+    
+    // Initialize parameters (default values)
+    loop->parameter_count = 4;  // Common parameters for most targets
+    for (size_t i = 0; i < loop->parameter_count; i++) {
+        loop->original_parameters[i] = 1.0f;
+        loop->current_parameters[i] = 1.0f;
+        loop->best_parameters[i] = 1.0f;
+    }
+    
+    // Initialize performance tracking
+    loop->baseline_meta_performance = 0.0f;
+    loop->current_meta_performance = 0.0f;
+    loop->best_meta_performance = 0.0f;
+    loop->improvement_cycles = 0;
+    
+    // Initialize bootstrapping
+    loop->bootstrapping_active = false;
+    loop->bootstrap_multiplier = 1.0f;
+    loop->bootstrap_iterations = 0;
+    
+    // Initialize state
+    loop->active = true;
+    loop->converged = false;
+    loop->self_modifying = false;
+    
+    arch->recursive_improvement_count++;
+    
+    printf("Created recursive improvement loop %u for %s\n", improvement_id, target_description);
+    
+    return improvement_id;
+}
+
+// Run a recursive improvement cycle
+bool recursive_improvement_run_cycle(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t improvement_id) {
+    
+    if (!arch || !arch->recursive_improvement_active || improvement_id == 0 ||
+        improvement_id > arch->recursive_improvement_count) {
+        return false;
+    }
+    
+    recursive_improvement_loop_t* loop = &arch->recursive_improvement_loops[improvement_id - 1];
+    
+    if (!loop->active || loop->converged) {
+        return false;
+    }
+    
+    // Prevent infinite recursion
+    if (loop->recursion_depth >= loop->max_recursion_depth) {
+        printf("Recursive improvement loop %u reached max recursion depth\n", improvement_id);
+        return false;
+    }
+    
+    loop->recursion_depth++;
+    
+    // Measure current meta-performance
+    float meta_performance = recursive_improvement_measure_meta_performance(arch, improvement_id);
+    
+    // Update performance history
+    if (loop->meta_history_count < 10) {
+        loop->meta_performance_history[loop->meta_history_count] = meta_performance;
+        loop->meta_history_count++;
+    } else {
+        // Shift history
+        for (size_t i = 0; i < 9; i++) {
+            loop->meta_performance_history[i] = loop->meta_performance_history[i + 1];
+        }
+        loop->meta_performance_history[9] = meta_performance;
+    }
+    
+    // Set baseline on first cycle
+    if (loop->improvement_cycles == 0) {
+        loop->baseline_meta_performance = meta_performance;
+        loop->best_meta_performance = meta_performance;
+    }
+    
+    loop->current_meta_performance = meta_performance;
+    
+    // Check if this is the best performance so far
+    if (meta_performance > loop->best_meta_performance) {
+        loop->best_meta_performance = meta_performance;
+        // Save best parameters
+        for (size_t i = 0; i < loop->parameter_count; i++) {
+            loop->best_parameters[i] = loop->current_parameters[i];
+        }
+    }
+    
+    // Perform recursive improvement based on target type
+    bool improved = false;
+    switch (loop->target_type) {
+        case RECURSIVE_TARGET_OPTIMIZATION_ALGORITHM:
+            improved = recursive_improvement_optimize_optimizer(arch, loop->meta_loop_id);
+            break;
+            
+        case RECURSIVE_TARGET_LEARNING_RATE:
+            // Self-modify learning rates of optimization loops
+            for (size_t i = 0; i < arch->optimization_loop_count; i++) {
+                float old_lr = arch->optimization_loops[i].learning_rate;
+                float new_lr = old_lr * (1.0f + 0.1f * (meta_performance - 0.5f));
+                new_lr = fmaxf(0.001f, fminf(0.1f, new_lr));  // Constrain learning rate
+                arch->optimization_loops[i].learning_rate = new_lr;
+                if (fabsf(new_lr - old_lr) > 0.001f) {
+                    improved = true;
+                    loop->self_modifying = true;
+                }
+            }
+            break;
+            
+        case RECURSIVE_TARGET_ATTENTION_ALLOCATION:
+            improved = recursive_improvement_adapt_architecture(arch, meta_performance);
+            break;
+            
+        case RECURSIVE_TARGET_REASONING_PATTERNS:
+            improved = recursive_improvement_self_modify_reasoning(arch);
+            break;
+            
+        case RECURSIVE_TARGET_MEMORY_ORGANIZATION:
+            // Self-modify memory organization parameters
+            if (arch->dashboard && meta_performance > 0.6f) {
+                // Increase memory allocation slightly
+                float memory_boost = 1.05f;
+                loop->current_parameters[0] *= memory_boost;
+                improved = true;
+                loop->self_modifying = true;
+            }
+            break;
+    }
+    
+    // Update cycle count
+    loop->improvement_cycles++;
+    
+    // Check convergence (simple criterion)
+    if (loop->improvement_cycles > 10 && 
+        fabsf(meta_performance - loop->baseline_meta_performance) < 0.01f) {
+        loop->converged = true;
+        printf("Recursive improvement loop %u converged after %lu cycles\n", 
+               improvement_id, loop->improvement_cycles);
+    }
+    
+    loop->recursion_depth--;
+    
+    printf("Recursive improvement cycle %u: meta_performance=%.3f, improved=%s\n",
+           improvement_id, meta_performance, improved ? "YES" : "NO");
+    
+    return improved;
+}
+
+// Bootstrap intelligence by creating meta-meta optimization
+bool recursive_improvement_bootstrap_intelligence(
+    distributed_cognitive_architecture_t* arch) {
+    
+    if (!arch || !arch->recursive_improvement_active) {
+        return false;
+    }
+    
+    printf("Starting intelligence bootstrapping process...\n");
+    
+    // Create meta-level optimization loops that optimize the recursive improvement process itself
+    uint32_t meta_meta_id = recursive_improvement_create_loop(
+        arch, 
+        RECURSIVE_TARGET_OPTIMIZATION_ALGORITHM, 
+        "Meta-optimization of recursive improvement algorithms"
+    );
+    
+    if (meta_meta_id == 0) {
+        return false;
+    }
+    
+    recursive_improvement_loop_t* meta_loop = &arch->recursive_improvement_loops[meta_meta_id - 1];
+    meta_loop->bootstrapping_active = true;
+    meta_loop->bootstrap_multiplier = 1.2f;  // Accelerate improvement
+    
+    // Run initial bootstrap cycle
+    bool success = false;
+    for (int bootstrap_iter = 0; bootstrap_iter < 3; bootstrap_iter++) {
+        printf("Bootstrap iteration %d...\n", bootstrap_iter + 1);
+        
+        // Run all recursive improvement loops
+        for (size_t i = 0; i < arch->recursive_improvement_count - 1; i++) {  // Exclude the meta-meta loop
+            recursive_improvement_run_cycle(arch, i + 1);
+        }
+        
+        // Run the meta-meta loop
+        if (recursive_improvement_run_cycle(arch, meta_meta_id)) {
+            success = true;
+            meta_loop->bootstrap_iterations++;
+        }
+        
+        // Apply bootstrap multiplier
+        float overall_performance = dashboard_compute_coherence(arch);
+        if (overall_performance > 0.7f) {
+            meta_loop->bootstrap_multiplier *= 1.1f;  // Accelerate further
+        }
+    }
+    
+    printf("Intelligence bootstrapping %s after %u iterations\n", 
+           success ? "succeeded" : "completed", meta_loop->bootstrap_iterations);
+    
+    return success;
+}
+
+// Optimize the optimizer (meta-optimization)
+bool recursive_improvement_optimize_optimizer(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t base_optimization_loop_id) {
+    
+    if (!arch) return false;
+    
+    printf("Optimizing optimization algorithm parameters...\n");
+    
+    bool any_improved = false;
+    
+    // For each optimization loop, try to improve its parameters
+    for (size_t i = 0; i < arch->optimization_loop_count; i++) {
+        self_optimization_loop_t* loop = &arch->optimization_loops[i];
+        
+        // Store original parameters
+        float orig_lr = loop->learning_rate;
+        float orig_momentum = loop->momentum;
+        
+        // Try slight modifications
+        float lr_variants[] = {orig_lr * 0.9f, orig_lr * 1.1f};
+        float momentum_variants[] = {orig_momentum * 0.95f, orig_momentum * 1.05f};
+        
+        float best_performance = loop->current_performance;
+        float best_lr = orig_lr;
+        float best_momentum = orig_momentum;
+        
+        // Test different parameter combinations
+        for (int lr_idx = 0; lr_idx < 2; lr_idx++) {
+            for (int mom_idx = 0; mom_idx < 2; mom_idx++) {
+                // Set test parameters
+                loop->learning_rate = fmaxf(0.001f, fminf(0.1f, lr_variants[lr_idx]));
+                loop->momentum = fmaxf(0.1f, fminf(0.99f, momentum_variants[mom_idx]));
+                
+                // Run a short test
+                float test_performance = dashboard_compute_coherence(arch);
+                
+                if (test_performance > best_performance) {
+                    best_performance = test_performance;
+                    best_lr = loop->learning_rate;
+                    best_momentum = loop->momentum;
+                    any_improved = true;
+                }
+            }
+        }
+        
+        // Apply best parameters
+        loop->learning_rate = best_lr;
+        loop->momentum = best_momentum;
+        
+        if (any_improved) {
+            printf("Optimized loop %zu: lr=%.4f, momentum=%.3f, performance=%.3f\n",
+                   i, best_lr, best_momentum, best_performance);
+        }
+    }
+    
+    return any_improved;
+}
+
+// Self-modify reasoning patterns
+bool recursive_improvement_self_modify_reasoning(
+    distributed_cognitive_architecture_t* arch) {
+    
+    if (!arch || !arch->atomspace) return false;
+    
+    printf("Self-modifying reasoning patterns...\n");
+    
+    // Simple self-modification: adjust reasoning weights based on performance
+    float current_performance = dashboard_compute_coherence(arch);
+    
+    if (current_performance > 0.6f) {
+        // Increase reasoning intensity
+        if (arch->dashboard) {
+            arch->dashboard->attention_distribution[1] *= 1.05f;  // Reasoning index
+            // Normalize attention distribution
+            float total = 0.0f;
+            for (int i = 0; i < 4; i++) {
+                total += arch->dashboard->attention_distribution[i];
+            }
+            for (int i = 0; i < 4; i++) {
+                arch->dashboard->attention_distribution[i] /= total;
+            }
+        }
+        
+        printf("Increased reasoning attention allocation\n");
+        return true;
+    }
+    
+    return false;
+}
+
+// Adapt cognitive architecture based on performance
+bool recursive_improvement_adapt_architecture(
+    distributed_cognitive_architecture_t* arch,
+    float performance_feedback) {
+    
+    if (!arch || !arch->dashboard) return false;
+    
+    printf("Adapting cognitive architecture based on performance %.3f...\n", performance_feedback);
+    
+    bool adapted = false;
+    
+    // Adjust attention allocation based on performance
+    if (performance_feedback > 0.7f) {
+        // Good performance - slight optimization
+        arch->dashboard->attention_distribution[3] *= 1.02f;  // Self-modification
+        adapted = true;
+    } else if (performance_feedback < 0.4f) {
+        // Poor performance - major reallocation
+        arch->dashboard->attention_distribution[0] *= 1.1f;   // Memory
+        arch->dashboard->attention_distribution[1] *= 1.05f;  // Reasoning
+        adapted = true;
+    }
+    
+    // Normalize attention distribution
+    if (adapted) {
+        float total = 0.0f;
+        for (int i = 0; i < 4; i++) {
+            total += arch->dashboard->attention_distribution[i];
+        }
+        for (int i = 0; i < 4; i++) {
+            arch->dashboard->attention_distribution[i] /= total;
+        }
+        
+        printf("Adapted attention allocation\n");
+    }
+    
+    return adapted;
+}
+
+// Print recursive improvement status
+void recursive_improvement_print_status(
+    distributed_cognitive_architecture_t* arch) {
+    
+    if (!arch) return;
+    
+    printf("\n=== Recursive Self-Improvement Status ===\n");
+    printf("Active: %s\n", arch->recursive_improvement_active ? "YES" : "NO");
+    printf("Recursive Improvement Loops: %zu\n", arch->recursive_improvement_count);
+    
+    for (size_t i = 0; i < arch->recursive_improvement_count; i++) {
+        recursive_improvement_loop_t* loop = &arch->recursive_improvement_loops[i];
+        printf("  Loop %u: %s\n", loop->improvement_id, loop->target_description);
+        printf("    Type: %d, Cycles: %lu, Performance: %.3f\n",
+               loop->target_type, loop->improvement_cycles, loop->current_meta_performance);
+        printf("    State: %s%s%s\n",
+               loop->active ? "ACTIVE" : "INACTIVE",
+               loop->converged ? " CONVERGED" : "",
+               loop->self_modifying ? " SELF-MODIFYING" : "");
+        printf("    Bootstrapping: %s (multiplier: %.2f)\n",
+               loop->bootstrapping_active ? "YES" : "NO", loop->bootstrap_multiplier);
+    }
+    
+    printf("=========================================\n");
+}
+
+// Measure meta-performance of recursive improvement
+float recursive_improvement_measure_meta_performance(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t improvement_id) {
+    
+    if (!arch || improvement_id == 0 || improvement_id > arch->recursive_improvement_count) {
+        return 0.0f;
+    }
+    
+    recursive_improvement_loop_t* loop = &arch->recursive_improvement_loops[improvement_id - 1];
+    
+    // Meta-performance combines several factors:
+    // 1. Overall system coherence
+    float system_coherence = dashboard_compute_coherence(arch);
+    
+    // 2. Improvement rate (how much we've improved over baseline)
+    float improvement_rate = 0.0f;
+    if (loop->improvement_cycles > 0 && loop->baseline_meta_performance > 0.0f) {
+        improvement_rate = (loop->current_meta_performance - loop->baseline_meta_performance) / 
+                          loop->baseline_meta_performance;
+    }
+    
+    // 3. Self-modification capability (bonus for being able to modify itself)
+    float self_mod_bonus = loop->self_modifying ? 0.1f : 0.0f;
+    
+    // 4. Bootstrapping effectiveness
+    float bootstrap_bonus = loop->bootstrapping_active ? 
+                           (loop->bootstrap_multiplier - 1.0f) * 0.1f : 0.0f;
+    
+    // Combine factors
+    float meta_performance = system_coherence * 0.5f + 
+                            improvement_rate * 0.3f + 
+                            self_mod_bonus + 
+                            bootstrap_bonus;
+    
+    // Constrain to [0, 1]
+    meta_performance = fmaxf(0.0f, fminf(1.0f, meta_performance));
+    
+    return meta_performance;
+}
+
+// Benchmark overall system performance
+float distributed_cognitive_benchmark_performance(
+    distributed_cognitive_architecture_t* arch) {
+    
+    if (!arch) return 0.0f;
+    
+    // Simple performance benchmark combining several metrics
+    float system_coherence = dashboard_compute_coherence(arch);
+    
+    float optimization_efficiency = 0.0f;
+    if (arch->optimization_loop_count > 0) {
+        int converged_loops = 0;
+        float avg_performance = 0.0f;
+        
+        for (size_t i = 0; i < arch->optimization_loop_count; i++) {
+            if (arch->optimization_loops[i].converged) {
+                converged_loops++;
+            }
+            avg_performance += arch->optimization_loops[i].current_performance;
+        }
+        
+        optimization_efficiency = (float)converged_loops / arch->optimization_loop_count;
+        avg_performance /= arch->optimization_loop_count;
+        optimization_efficiency = (optimization_efficiency + avg_performance) * 0.5f;
+    }
+    
+    float recursive_improvement_efficiency = 0.0f;
+    if (arch->recursive_improvement_count > 0) {
+        for (size_t i = 0; i < arch->recursive_improvement_count; i++) {
+            recursive_improvement_efficiency += arch->recursive_improvement_loops[i].current_meta_performance;
+        }
+        recursive_improvement_efficiency /= arch->recursive_improvement_count;
+    }
+    
+    // Combine metrics
+    float overall_performance = system_coherence * 0.4f + 
+                              optimization_efficiency * 0.3f + 
+                              recursive_improvement_efficiency * 0.3f;
+    
+    return fmaxf(0.0f, fminf(1.0f, overall_performance));
 }
