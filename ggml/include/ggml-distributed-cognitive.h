@@ -170,6 +170,28 @@ typedef struct {
     bool self_modifying;
 } recursive_improvement_loop_t;
 
+// Architecture evolution history tracking
+typedef struct {
+    char change_description[256];
+    float performance_before;
+    float performance_after;
+    float performance_delta;
+    uint64_t timestamp;
+    bool successful;
+} architecture_evolution_record_t;
+
+// Dynamic cognitive module
+typedef struct {
+    char module_name[64];
+    char module_type[64];
+    uint32_t module_id;
+    float performance_contribution;
+    float creation_threshold;
+    bool active;
+    uint64_t creation_time;
+    uint64_t last_update_time;
+} dynamic_cognitive_module_t;
+
 // Distributed cognitive architecture
 typedef struct {
     // Core systems
@@ -200,6 +222,16 @@ typedef struct {
     recursive_improvement_loop_t* recursive_improvement_loops;
     size_t recursive_improvement_count;
     size_t recursive_improvement_capacity;
+    
+    // Architecture evolution tracking
+    architecture_evolution_record_t* evolution_history;
+    size_t evolution_history_count;
+    size_t evolution_history_capacity;
+    
+    // Dynamic cognitive modules
+    dynamic_cognitive_module_t* dynamic_modules;
+    size_t dynamic_module_count;
+    size_t dynamic_module_capacity;
     
     // System state
     bool initialized;
@@ -412,6 +444,32 @@ GGML_API void recursive_improvement_print_status(
 GGML_API float recursive_improvement_measure_meta_performance(
     distributed_cognitive_architecture_t* arch,
     uint32_t improvement_id);
+
+// Enhanced architecture evolution functions
+GGML_API bool architecture_evolution_create_module(
+    distributed_cognitive_architecture_t* arch,
+    const char* module_name,
+    const char* module_type,
+    float performance_threshold);
+
+GGML_API bool architecture_evolution_remove_module(
+    distributed_cognitive_architecture_t* arch,
+    const char* module_name);
+
+GGML_API bool architecture_evolution_modify_topology(
+    distributed_cognitive_architecture_t* arch,
+    const char* topology_change,
+    float performance_feedback);
+
+GGML_API bool architecture_evolution_learn_from_history(
+    distributed_cognitive_architecture_t* arch,
+    float current_performance);
+
+GGML_API void architecture_evolution_track_change(
+    distributed_cognitive_architecture_t* arch,
+    const char* change_description,
+    float performance_before,
+    float performance_after);
 
 // Utility functions
 GGML_API void distributed_cognitive_print_architecture(

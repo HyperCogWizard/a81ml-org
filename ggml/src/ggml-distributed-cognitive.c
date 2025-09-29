@@ -88,6 +88,16 @@ distributed_cognitive_architecture_t* distributed_cognitive_init(
     arch->recursive_improvement_loops = calloc(arch->recursive_improvement_capacity, sizeof(recursive_improvement_loop_t));
     arch->recursive_improvement_count = 0;
     
+    // Initialize architecture evolution tracking
+    arch->evolution_history_capacity = 100;
+    arch->evolution_history = calloc(arch->evolution_history_capacity, sizeof(architecture_evolution_record_t));
+    arch->evolution_history_count = 0;
+    
+    // Initialize dynamic cognitive modules
+    arch->dynamic_module_capacity = 16;
+    arch->dynamic_modules = calloc(arch->dynamic_module_capacity, sizeof(dynamic_cognitive_module_t));
+    arch->dynamic_module_count = 0;
+    
     // Initialize system state
     arch->initialized = true;
     arch->self_optimization_active = false;
@@ -161,6 +171,12 @@ void distributed_cognitive_free(distributed_cognitive_architecture_t* arch) {
     
     // Free recursive improvement loops
     free(arch->recursive_improvement_loops);
+    
+    // Free architecture evolution history
+    free(arch->evolution_history);
+    
+    // Free dynamic cognitive modules
+    free(arch->dynamic_modules);
     
     free(arch);
 }
@@ -1163,9 +1179,10 @@ bool recursive_improvement_adapt_architecture(
     
     printf("Adapting cognitive architecture based on performance %.3f...\n", performance_feedback);
     
+    float performance_before = distributed_cognitive_benchmark_performance(arch);
     bool adapted = false;
     
-    // Adjust attention allocation based on performance
+    // 1. Adjust attention allocation based on performance
     if (performance_feedback > 0.7f) {
         // Good performance - slight optimization
         arch->dashboard->attention_distribution[3] *= 1.02f;  // Self-modification
@@ -1177,6 +1194,51 @@ bool recursive_improvement_adapt_architecture(
         adapted = true;
     }
     
+    // 2. Dynamic module management based on performance
+    if (performance_feedback < 0.3f) {
+        // Very poor performance - create specialized modules
+        if (arch->dynamic_module_count < arch->dynamic_module_capacity) {
+            bool created = architecture_evolution_create_module(
+                arch, "emergency_reasoner", "reasoning", 0.3f);
+            if (created) {
+                adapted = true;
+                printf("Created emergency reasoning module due to poor performance\n");
+            }
+        }
+    } else if (performance_feedback > 0.8f) {
+        // Excellent performance - create optimization modules
+        if (arch->dynamic_module_count < arch->dynamic_module_capacity) {
+            bool created = architecture_evolution_create_module(
+                arch, "efficiency_optimizer", "optimization", 0.8f);
+            if (created) {
+                adapted = true;
+                printf("Created efficiency optimization module\n");
+            }
+        }
+    }
+    
+    // 3. Topology modification based on system state
+    if (performance_feedback < 0.5f && arch->membrane_count > 2) {
+        // Poor performance with complex topology - simplify
+        bool modified = architecture_evolution_modify_topology(
+            arch, "simplify_membrane_hierarchy", performance_feedback);
+        if (modified) {
+            adapted = true;
+            printf("Simplified membrane topology for better performance\n");
+        }
+    } else if (performance_feedback > 0.75f && arch->membrane_count < 8) {
+        // Good performance with simple topology - complexify for more capability
+        bool modified = architecture_evolution_modify_topology(
+            arch, "expand_membrane_hierarchy", performance_feedback);
+        if (modified) {
+            adapted = true;
+            printf("Expanded membrane topology for enhanced capability\n");
+        }
+    }
+    
+    // 4. Learn from evolution history
+    architecture_evolution_learn_from_history(arch, performance_feedback);
+    
     // Normalize attention distribution
     if (adapted) {
         float total = 0.0f;
@@ -1187,7 +1249,15 @@ bool recursive_improvement_adapt_architecture(
             arch->dashboard->attention_distribution[i] /= total;
         }
         
-        printf("Adapted attention allocation\n");
+        // Track the architectural change
+        float performance_after = distributed_cognitive_benchmark_performance(arch);
+        architecture_evolution_track_change(
+            arch, 
+            "automated_architecture_adaptation", 
+            performance_before, 
+            performance_after);
+        
+        printf("Adapted attention allocation and architecture\n");
     }
     
     return adapted;
@@ -1300,4 +1370,237 @@ float distributed_cognitive_benchmark_performance(
                               recursive_improvement_efficiency * 0.3f;
     
     return fmaxf(0.0f, fminf(1.0f, overall_performance));
+}
+
+// ================================
+// Architecture Evolution Functions
+// ================================
+
+// Generate unique module ID
+static uint32_t generate_module_id(void) {
+    static uint32_t counter = 1;
+    return counter++;
+}
+
+// Create a new dynamic cognitive module
+bool architecture_evolution_create_module(
+    distributed_cognitive_architecture_t* arch,
+    const char* module_name,
+    const char* module_type,
+    float performance_threshold) {
+    
+    if (!arch || !module_name || !module_type || 
+        arch->dynamic_module_count >= arch->dynamic_module_capacity) {
+        return false;
+    }
+    
+    // Check if module already exists
+    for (size_t i = 0; i < arch->dynamic_module_count; i++) {
+        if (strcmp(arch->dynamic_modules[i].module_name, module_name) == 0) {
+            printf("Module '%s' already exists\n", module_name);
+            return false;
+        }
+    }
+    
+    dynamic_cognitive_module_t* module = &arch->dynamic_modules[arch->dynamic_module_count];
+    
+    // Initialize module
+    strncpy(module->module_name, module_name, sizeof(module->module_name) - 1);
+    module->module_name[sizeof(module->module_name) - 1] = '\0';
+    strncpy(module->module_type, module_type, sizeof(module->module_type) - 1);
+    module->module_type[sizeof(module->module_type) - 1] = '\0';
+    
+    module->module_id = generate_module_id();
+    module->performance_contribution = 0.0f;
+    module->creation_threshold = performance_threshold;
+    module->active = true;
+    module->creation_time = arch->system_time;
+    module->last_update_time = arch->system_time;
+    
+    arch->dynamic_module_count++;
+    
+    printf("Created dynamic module: %s (type: %s, threshold: %.3f)\n",
+           module_name, module_type, performance_threshold);
+    
+    return true;
+}
+
+// Remove a dynamic cognitive module
+bool architecture_evolution_remove_module(
+    distributed_cognitive_architecture_t* arch,
+    const char* module_name) {
+    
+    if (!arch || !module_name) return false;
+    
+    // Find module to remove
+    for (size_t i = 0; i < arch->dynamic_module_count; i++) {
+        if (strcmp(arch->dynamic_modules[i].module_name, module_name) == 0) {
+            printf("Removing dynamic module: %s\n", module_name);
+            
+            // Shift remaining modules down
+            for (size_t j = i; j < arch->dynamic_module_count - 1; j++) {
+                arch->dynamic_modules[j] = arch->dynamic_modules[j + 1];
+            }
+            
+            arch->dynamic_module_count--;
+            return true;
+        }
+    }
+    
+    printf("Module '%s' not found for removal\n", module_name);
+    return false;
+}
+
+// Modify cognitive architecture topology
+bool architecture_evolution_modify_topology(
+    distributed_cognitive_architecture_t* arch,
+    const char* topology_change,
+    float performance_feedback) {
+    
+    if (!arch || !topology_change) return false;
+    
+    bool modified = false;
+    
+    if (strcmp(topology_change, "simplify_membrane_hierarchy") == 0) {
+        // Reduce membrane complexity for better performance
+        if (arch->membrane_count > 2) {
+            // Merge least efficient membranes
+            float min_efficiency = 1.0f;
+            size_t target_membrane = 0;
+            
+            for (size_t i = 1; i < arch->membrane_count; i++) {  // Skip root membrane
+                if (arch->membranes[i].efficiency_score < min_efficiency) {
+                    min_efficiency = arch->membranes[i].efficiency_score;
+                    target_membrane = i;
+                }
+            }
+            
+            if (target_membrane > 0 && min_efficiency < 0.5f) {
+                printf("Simplifying topology: merging inefficient membrane %zu\n", target_membrane);
+                
+                // Mark membrane as inactive (simplified approach)
+                arch->membranes[target_membrane].active = false;
+                modified = true;
+            }
+        }
+    } else if (strcmp(topology_change, "expand_membrane_hierarchy") == 0) {
+        // Add complexity for enhanced capability
+        if (arch->membrane_count < arch->membrane_capacity) {
+            uint32_t new_membrane_id = psystem_create_membrane(
+                arch, "evolved_membrane", MEMBRANE_TISSUE, 1);  // Parent to root
+            
+            if (new_membrane_id > 0) {
+                printf("Expanding topology: created new membrane %u\n", new_membrane_id);
+                modified = true;
+            }
+        }
+    } else if (strcmp(topology_change, "optimize_communication_patterns") == 0) {
+        // Adjust membrane permeability based on performance
+        for (size_t i = 0; i < arch->membrane_count; i++) {
+            if (arch->membranes[i].active) {
+                if (performance_feedback > 0.7f) {
+                    // Increase permeability for better flow
+                    arch->membranes[i].permeability *= 1.1f;
+                    arch->membranes[i].permeability = fminf(1.0f, arch->membranes[i].permeability);
+                } else if (performance_feedback < 0.4f) {
+                    // Decrease permeability to prevent interference
+                    arch->membranes[i].permeability *= 0.9f;
+                    arch->membranes[i].permeability = fmaxf(0.1f, arch->membranes[i].permeability);
+                }
+                modified = true;
+            }
+        }
+        
+        if (modified) {
+            printf("Optimized communication patterns based on performance %.3f\n", performance_feedback);
+        }
+    }
+    
+    return modified;
+}
+
+// Learn from architecture evolution history
+bool architecture_evolution_learn_from_history(
+    distributed_cognitive_architecture_t* arch,
+    float current_performance) {
+    
+    if (!arch || arch->evolution_history_count == 0) return false;
+    
+    printf("Learning from %zu architecture evolution records...\n", arch->evolution_history_count);
+    
+    // Analyze successful changes
+    int successful_changes = 0;
+    float avg_successful_delta = 0.0f;
+    
+    for (size_t i = 0; i < arch->evolution_history_count; i++) {
+        architecture_evolution_record_t* record = &arch->evolution_history[i];
+        
+        if (record->successful && record->performance_delta > 0.0f) {
+            successful_changes++;
+            avg_successful_delta += record->performance_delta;
+            
+            // Apply similar changes if current performance is poor
+            if (current_performance < 0.5f) {
+                printf("Applying learned pattern: %s\n", record->change_description);
+                
+                // Example: If attention reallocation was successful before, do it again
+                if (strstr(record->change_description, "attention") != NULL) {
+                    // Slightly boost memory and reasoning attention
+                    if (arch->dashboard) {
+                        arch->dashboard->attention_distribution[0] *= 1.02f;  // Memory
+                        arch->dashboard->attention_distribution[1] *= 1.02f;  // Reasoning
+                        
+                        // Normalize
+                        float total = 0.0f;
+                        for (int j = 0; j < 4; j++) {
+                            total += arch->dashboard->attention_distribution[j];
+                        }
+                        for (int j = 0; j < 4; j++) {
+                            arch->dashboard->attention_distribution[j] /= total;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if (successful_changes > 0) {
+        avg_successful_delta /= successful_changes;
+        printf("Learned from %d successful changes (avg delta: %.3f)\n", 
+               successful_changes, avg_successful_delta);
+        return true;
+    }
+    
+    return false;
+}
+
+// Track architecture evolution changes
+void architecture_evolution_track_change(
+    distributed_cognitive_architecture_t* arch,
+    const char* change_description,
+    float performance_before,
+    float performance_after) {
+    
+    if (!arch || !change_description || 
+        arch->evolution_history_count >= arch->evolution_history_capacity) {
+        return;
+    }
+    
+    architecture_evolution_record_t* record = &arch->evolution_history[arch->evolution_history_count];
+    
+    // Initialize record
+    strncpy(record->change_description, change_description, sizeof(record->change_description) - 1);
+    record->change_description[sizeof(record->change_description) - 1] = '\0';
+    
+    record->performance_before = performance_before;
+    record->performance_after = performance_after;
+    record->performance_delta = performance_after - performance_before;
+    record->timestamp = arch->system_time;
+    record->successful = record->performance_delta > 0.01f;  // Threshold for success
+    
+    arch->evolution_history_count++;
+    
+    printf("Tracked evolution: %s (delta: %+.3f, %s)\n",
+           change_description, record->performance_delta,
+           record->successful ? "SUCCESS" : "FAILURE");
 }

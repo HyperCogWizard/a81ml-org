@@ -87,6 +87,7 @@ The system leverages and extends the existing ggml RPC infrastructure:
 - **Self-modifying parameters** - Dynamic learning rate and attention adaptation
 - **Meta-optimization** - Optimization algorithms that optimize other optimization algorithms
 - **Performance-based architecture adaptation** - System modifies its own structure
+- **Automated architecture evolution** - Dynamic creation/removal of cognitive modules, topology modification, and learning from successful adaptations
 
 ### 🏗️ Emergent Architecture
 - Spontaneous role specialization
