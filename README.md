@@ -31,6 +31,10 @@ make -j8
 
 # Run comprehensive recursive self-improvement tests
 ./bin/test-recursive-self-improvement
+
+# Test emergent behavior analysis (NEW!)
+./test_emergent_behavior_analysis
+./test_distributed_emergent_integration
 ```
 
 ## Architecture Components
@@ -93,6 +97,14 @@ The system leverages and extends the existing ggml RPC infrastructure:
 - Spontaneous role specialization
 - Adaptive communication patterns
 - Hierarchical structures from flat networks
+- **Real-time emergent behavior analysis** - Detection and classification of spontaneous behaviors
+
+### 🔍 Emergent Behavior Analysis
+- **Spontaneous Optimization Detection** - Identifies improvement without explicit commands
+- **Emergent Cooperation Analysis** - Detects superlinear performance gains from module interactions
+- **Phase Transition Recognition** - Monitors major operational mode changes
+- **Novel Adaptation Patterns** - Discovers new attention allocation strategies
+- **Performance Correlation Analysis** - Statistical analysis of behavioral relationships
 
 ### 💡 Cognitive Grammar
 - GBNF-based reasoning constraints
@@ -104,6 +116,7 @@ The system leverages and extends the existing ggml RPC infrastructure:
 - [**Distributed Cognitive Architecture**](docs/distributed-cognitive-architecture.md) - Complete architectural overview
 - [**Implementation Guide**](docs/implementation-guide.md) - Practical development guide
 - [**Recursive Self-Improvement**](docs/recursive-self-improvement.md) - **NEW!** Complete guide to recursive self-improvement capabilities
+- [**Emergent Behavior Analysis**](docs/emergent-behavior-analysis.md) - **NEW!** Real-time detection and analysis of emergent behaviors
 - [**Cognitive Grammar Examples**](docs/cognitive-grammar-examples.md) - Grammar system usage
 - [**CogUtil Library**](docs/cogutil.md) - OpenCog utility library for foundation services
 - [**Component Dependencies**](components/README.md) - Component dependency system and specifications
@@ -121,6 +134,7 @@ The demo includes:
 - **Scientist Agent**: Focuses on neuroscience perspective
 - **Collaborative Reasoning**: Cross-agent knowledge exchange
 - **Attention Management**: Dynamic resource allocation
+- **Emergent Behavior Analysis**: Real-time detection of emergent behaviors
 
 ### MOSES Evolutionary Optimization
 ```bash
@@ -360,8 +374,8 @@ distributed_cognitive_sync_with_network(agent);
 - [x] **Intelligence bootstrapping** - Uses current intelligence to create better intelligence
 - [x] **Self-modifying learning parameters** - Dynamic adaptation of learning rates and attention allocation
 - [x] **Automated architecture evolution** - System modifies its own cognitive structure
+- [x] **Emergent behavior analysis** - Real-time detection and analysis of emergent behaviors
 - [ ] Meta-meta-reasoning capabilities
-- [ ] Emergent behavior analysis
 
 ## Contributing
 
