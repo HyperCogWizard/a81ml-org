@@ -130,7 +130,8 @@ typedef enum {
     RECURSIVE_TARGET_LEARNING_RATE = 2,
     RECURSIVE_TARGET_ATTENTION_ALLOCATION = 3,
     RECURSIVE_TARGET_REASONING_PATTERNS = 4,
-    RECURSIVE_TARGET_MEMORY_ORGANIZATION = 5
+    RECURSIVE_TARGET_MEMORY_ORGANIZATION = 5,
+    RECURSIVE_TARGET_META_META_REASONING = 6
 } recursive_improvement_target_t;
 
 typedef struct {
@@ -169,6 +170,58 @@ typedef struct {
     bool converged;
     bool self_modifying;
 } recursive_improvement_loop_t;
+
+// Meta-meta-reasoning structures
+typedef enum {
+    META_META_REASONING_DEDUCTION = 1,
+    META_META_REASONING_INDUCTION = 2,
+    META_META_REASONING_ABDUCTION = 3,
+    META_META_REASONING_ANALOGY = 4,
+    META_META_REASONING_REFLECTION = 5
+} meta_meta_reasoning_type_t;
+
+typedef struct {
+    meta_meta_reasoning_type_t reasoning_type;
+    char reasoning_pattern[256];
+    float pattern_strength;
+    float meta_confidence;
+    uint64_t application_count;
+    float success_rate;
+    float efficiency_score;
+} meta_reasoning_pattern_t;
+
+typedef struct {
+    uint32_t meta_meta_id;
+    char description[128];
+    
+    // Reasoning about reasoning patterns
+    meta_reasoning_pattern_t* patterns;
+    size_t pattern_count;
+    size_t pattern_capacity;
+    
+    // Self-reflection state
+    float self_awareness_level;
+    float reasoning_coherence;
+    float meta_meta_confidence;
+    
+    // Performance tracking
+    float reasoning_effectiveness;
+    float pattern_evolution_rate;
+    uint64_t meta_cycles_completed;
+    
+    // Meta-cognitive grammar rules
+    struct ggml_tensor* meta_grammar_weights;
+    struct ggml_tensor* reasoning_pattern_embeddings;
+    
+    // Temporal reasoning tracking
+    float temporal_consistency;
+    uint64_t last_reflection_timestamp;
+    
+    // State flags
+    bool active;
+    bool self_reflective;
+    bool pattern_learning_active;
+} meta_meta_reasoning_loop_t;
 
 // Architecture evolution history tracking
 typedef struct {
@@ -223,6 +276,11 @@ typedef struct {
     size_t recursive_improvement_count;
     size_t recursive_improvement_capacity;
     
+    // Meta-meta-reasoning loops
+    meta_meta_reasoning_loop_t* meta_meta_reasoning_loops;
+    size_t meta_meta_reasoning_count;
+    size_t meta_meta_reasoning_capacity;
+    
     // Architecture evolution tracking
     architecture_evolution_record_t* evolution_history;
     size_t evolution_history_count;
@@ -237,6 +295,7 @@ typedef struct {
     bool initialized;
     bool self_optimization_active;
     bool recursive_improvement_active;
+    bool meta_meta_reasoning_active;
     uint64_t system_time;
     
     // Performance metrics
@@ -444,6 +503,37 @@ GGML_API void recursive_improvement_print_status(
 GGML_API float recursive_improvement_measure_meta_performance(
     distributed_cognitive_architecture_t* arch,
     uint32_t improvement_id);
+
+// Meta-meta-reasoning functions
+GGML_API uint32_t meta_meta_reasoning_create_loop(
+    distributed_cognitive_architecture_t* arch,
+    const char* description);
+
+GGML_API bool meta_meta_reasoning_run_cycle(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t meta_meta_id);
+
+GGML_API bool meta_meta_reasoning_add_pattern(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t meta_meta_id,
+    meta_meta_reasoning_type_t type,
+    const char* pattern,
+    float strength);
+
+GGML_API bool meta_meta_reasoning_self_reflect(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t meta_meta_id);
+
+GGML_API bool meta_meta_reasoning_evolve_patterns(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t meta_meta_id);
+
+GGML_API float meta_meta_reasoning_measure_coherence(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t meta_meta_id);
+
+GGML_API void meta_meta_reasoning_print_status(
+    distributed_cognitive_architecture_t* arch);
 
 // Enhanced architecture evolution functions
 GGML_API bool architecture_evolution_create_module(
