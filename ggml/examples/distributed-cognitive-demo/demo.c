@@ -1,6 +1,8 @@
 #include "ggml-distributed-cognitive.h"
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
+#include <math.h>
 
 // Demo: Comprehensive Distributed Cognitive Architecture
 void demo_distributed_cognitive_integration(void) {
@@ -23,6 +25,11 @@ void demo_distributed_cognitive_integration(void) {
     
     printf("\n1. Architecture Initialization Complete\n");
     distributed_cognitive_print_architecture(arch);
+    
+    // Enable emergent behavior analysis
+    printf("\n1a. Enabling Emergent Behavior Analysis\n");
+    bool behavior_analysis_enabled = distributed_cognitive_enable_emergent_behavior_analysis(arch);
+    printf("Emergent behavior analysis: %s\n", behavior_analysis_enabled ? "ENABLED" : "FAILED");
     
     // Create P-System membranes for different cognitive levels
     printf("\n2. Creating P-System Membrane Hierarchy\n");
@@ -97,6 +104,13 @@ void demo_distributed_cognitive_integration(void) {
         printf("  Cycle %d:\n", cycle + 1);
         optimization_run_cycle(arch);
         dashboard_update(arch);
+        
+        // Analyze emergent behaviors during optimization
+        bool behavior_detected = emergent_behavior_analyze_system(arch);
+        if (behavior_detected) {
+            printf("    -> Emergent behaviors detected during optimization cycle %d\n", cycle + 1);
+        }
+        
         usleep(100000);  // 0.1 second delay
     }
     
@@ -127,6 +141,12 @@ void demo_distributed_cognitive_integration(void) {
             unit->activation_level = fminf(unit->activation_level + 0.1f, 1.0f);
             unit->attention_value = fminf(unit->attention_value + 0.05f, 1.0f);
         }
+        
+        // Analyze emergent behaviors during adaptation
+        bool behavior_detected = emergent_behavior_analyze_system(arch);
+        if (behavior_detected) {
+            printf("    -> Emergent behaviors detected during adaptation %d\n", adaptation + 1);
+        }
     }
     
     // Update activations and compute final coherence
@@ -150,6 +170,10 @@ void demo_distributed_cognitive_integration(void) {
     printf("\n13. Final Architecture State\n");
     distributed_cognitive_print_architecture(arch);
     
+    // Print emergent behavior analysis summary
+    printf("\n14. Emergent Behavior Analysis Summary\n");
+    emergent_behavior_print_analysis(arch);
+    
     printf("\n=== Integration Demo Summary ===\n");
     printf("✓ Cogfluence system: %zu knowledge units, %zu workflows\n", 
            arch->cogfluence->unit_count, arch->cogfluence->workflow_count);
@@ -161,6 +185,8 @@ void demo_distributed_cognitive_integration(void) {
     printf("✓ Meta-cognitive dashboard: Real-time monitoring\n");
     printf("✓ Self-optimization: %zu active loops\n", 
            arch->optimization_loop_count);
+    printf("✓ Emergent behavior analysis: %zu behaviors detected\n", 
+           emergent_behavior_get_detection_count(arch));
     printf("✓ Transduction pipelines: Full integration\n");
     printf("✓ Test suite: %s\n", tests_passed ? "PASSED" : "FAILED");
     printf("✓ Final coherence: %.3f\n", final_coherence);
@@ -175,6 +201,7 @@ void demo_distributed_cognitive_integration(void) {
         printf("• Multi-system attention allocation\n");
         printf("• P-System membrane encapsulation\n");
         printf("• Neural-symbolic knowledge representation\n");
+        printf("• Emergent self-monitoring behavior\n");
     } else {
         printf("\n⚠️  PARTIAL SUCCESS: System operational but optimization needed\n");
     }
