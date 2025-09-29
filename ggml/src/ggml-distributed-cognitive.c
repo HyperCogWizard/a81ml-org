@@ -23,6 +23,11 @@ static uint32_t generate_improvement_id(void) {
     return counter++;
 }
 
+static uint32_t generate_meta_meta_id(void) {
+    static uint32_t counter = 1;
+    return counter++;
+}
+
 // Initialize distributed cognitive architecture
 distributed_cognitive_architecture_t* distributed_cognitive_init(
     struct ggml_context* ctx,
@@ -88,6 +93,11 @@ distributed_cognitive_architecture_t* distributed_cognitive_init(
     arch->recursive_improvement_loops = calloc(arch->recursive_improvement_capacity, sizeof(recursive_improvement_loop_t));
     arch->recursive_improvement_count = 0;
     
+    // Initialize meta-meta-reasoning loops
+    arch->meta_meta_reasoning_capacity = 4;
+    arch->meta_meta_reasoning_loops = calloc(arch->meta_meta_reasoning_capacity, sizeof(meta_meta_reasoning_loop_t));
+    arch->meta_meta_reasoning_count = 0;
+    
     // Initialize architecture evolution tracking
     arch->evolution_history_capacity = 100;
     arch->evolution_history = calloc(arch->evolution_history_capacity, sizeof(architecture_evolution_record_t));
@@ -102,6 +112,7 @@ distributed_cognitive_architecture_t* distributed_cognitive_init(
     arch->initialized = true;
     arch->self_optimization_active = false;
     arch->recursive_improvement_active = true;  // Enable recursive self-improvement by default
+    arch->meta_meta_reasoning_active = true;   // Enable meta-meta-reasoning by default
     arch->system_time = (uint64_t)time(NULL);
     
     // Initialize performance metrics
@@ -171,6 +182,16 @@ void distributed_cognitive_free(distributed_cognitive_architecture_t* arch) {
     
     // Free recursive improvement loops
     free(arch->recursive_improvement_loops);
+    
+    // Free meta-meta-reasoning loops
+    if (arch->meta_meta_reasoning_loops) {
+        for (size_t i = 0; i < arch->meta_meta_reasoning_count; i++) {
+            if (arch->meta_meta_reasoning_loops[i].patterns) {
+                free(arch->meta_meta_reasoning_loops[i].patterns);
+            }
+        }
+        free(arch->meta_meta_reasoning_loops);
+    }
     
     // Free architecture evolution history
     free(arch->evolution_history);
@@ -1603,4 +1624,386 @@ void architecture_evolution_track_change(
     printf("Tracked evolution: %s (delta: %+.3f, %s)\n",
            change_description, record->performance_delta,
            record->successful ? "SUCCESS" : "FAILURE");
+}
+
+// ============================================================================
+// Meta-Meta-Reasoning Implementation
+// ============================================================================
+
+// Create a new meta-meta-reasoning loop
+uint32_t meta_meta_reasoning_create_loop(
+    distributed_cognitive_architecture_t* arch,
+    const char* description) {
+    
+    if (!arch || !arch->meta_meta_reasoning_active) {
+        return 0;
+    }
+    
+    if (arch->meta_meta_reasoning_count >= arch->meta_meta_reasoning_capacity) {
+        printf("Warning: Cannot create more meta-meta-reasoning loops (capacity: %zu)\n", 
+               arch->meta_meta_reasoning_capacity);
+        return 0;
+    }
+    
+    uint32_t meta_meta_id = generate_meta_meta_id();
+    meta_meta_reasoning_loop_t* loop = &arch->meta_meta_reasoning_loops[arch->meta_meta_reasoning_count];
+    
+    // Initialize meta-meta-reasoning loop
+    loop->meta_meta_id = meta_meta_id;
+    strncpy(loop->description, description, sizeof(loop->description) - 1);
+    loop->description[sizeof(loop->description) - 1] = '\0';
+    
+    // Initialize reasoning patterns
+    loop->pattern_capacity = 16;
+    loop->patterns = calloc(loop->pattern_capacity, sizeof(meta_reasoning_pattern_t));
+    loop->pattern_count = 0;
+    
+    // Initialize cognitive state
+    loop->self_awareness_level = 0.5f;
+    loop->reasoning_coherence = 0.6f;
+    loop->meta_meta_confidence = 0.4f;
+    
+    // Initialize performance tracking
+    loop->reasoning_effectiveness = 0.5f;
+    loop->pattern_evolution_rate = 0.1f;
+    loop->meta_cycles_completed = 0;
+    
+    // Initialize meta-cognitive grammar weights (create tensors for reasoning patterns)
+    loop->meta_grammar_weights = ggml_new_tensor_1d(arch->ctx, GGML_TYPE_F32, 32);
+    loop->reasoning_pattern_embeddings = ggml_new_tensor_2d(arch->ctx, GGML_TYPE_F32, 64, 16);
+    
+    // Initialize temporal state
+    loop->temporal_consistency = 0.7f;
+    loop->last_reflection_timestamp = arch->system_time;
+    
+    // Set state flags
+    loop->active = true;
+    loop->self_reflective = true;
+    loop->pattern_learning_active = true;
+    
+    arch->meta_meta_reasoning_count++;
+    
+    printf("Created meta-meta-reasoning loop %u: %s\n", meta_meta_id, description);
+    
+    return meta_meta_id;
+}
+
+// Run a meta-meta-reasoning cycle
+bool meta_meta_reasoning_run_cycle(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t meta_meta_id) {
+    
+    if (!arch || !arch->meta_meta_reasoning_active || meta_meta_id == 0) {
+        return false;
+    }
+    
+    // Find the meta-meta-reasoning loop
+    meta_meta_reasoning_loop_t* loop = NULL;
+    for (size_t i = 0; i < arch->meta_meta_reasoning_count; i++) {
+        if (arch->meta_meta_reasoning_loops[i].meta_meta_id == meta_meta_id) {
+            loop = &arch->meta_meta_reasoning_loops[i];
+            break;
+        }
+    }
+    
+    if (!loop || !loop->active) {
+        return false;
+    }
+    
+    printf("Running meta-meta-reasoning cycle %u: %s\n", meta_meta_id, loop->description);
+    
+    bool improvement_made = false;
+    
+    // 1. Self-reflection on reasoning processes
+    if (meta_meta_reasoning_self_reflect(arch, meta_meta_id)) {
+        improvement_made = true;
+    }
+    
+    // 2. Evolve reasoning patterns based on performance
+    if (meta_meta_reasoning_evolve_patterns(arch, meta_meta_id)) {
+        improvement_made = true;
+    }
+    
+    // 3. Analyze coherence of meta-reasoning
+    float coherence = meta_meta_reasoning_measure_coherence(arch, meta_meta_id);
+    if (coherence > loop->reasoning_coherence) {
+        loop->reasoning_coherence = coherence;
+        improvement_made = true;
+    }
+    
+    // 4. Update meta-meta confidence based on reasoning effectiveness
+    float effectiveness_delta = loop->reasoning_effectiveness - 0.5f;
+    loop->meta_meta_confidence += effectiveness_delta * 0.1f;
+    loop->meta_meta_confidence = fmaxf(0.0f, fminf(1.0f, loop->meta_meta_confidence));
+    
+    // 5. Update temporal consistency
+    uint64_t time_since_reflection = arch->system_time - loop->last_reflection_timestamp;
+    if (time_since_reflection > 1000) {  // More than 1000 time units
+        loop->temporal_consistency *= 0.98f;  // Slight decay
+    } else {
+        loop->temporal_consistency = fminf(1.0f, loop->temporal_consistency + 0.01f);
+    }
+    
+    loop->meta_cycles_completed++;
+    loop->last_reflection_timestamp = arch->system_time;
+    
+    printf("Meta-meta-reasoning cycle %u completed. Improvement: %s, Coherence: %.3f\n",
+           meta_meta_id, improvement_made ? "YES" : "NO", coherence);
+    
+    return improvement_made;
+}
+
+// Add a reasoning pattern to the meta-meta-reasoning loop
+bool meta_meta_reasoning_add_pattern(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t meta_meta_id,
+    meta_meta_reasoning_type_t type,
+    const char* pattern,
+    float strength) {
+    
+    if (!arch || meta_meta_id == 0 || !pattern) {
+        return false;
+    }
+    
+    // Find the meta-meta-reasoning loop
+    meta_meta_reasoning_loop_t* loop = NULL;
+    for (size_t i = 0; i < arch->meta_meta_reasoning_count; i++) {
+        if (arch->meta_meta_reasoning_loops[i].meta_meta_id == meta_meta_id) {
+            loop = &arch->meta_meta_reasoning_loops[i];
+            break;
+        }
+    }
+    
+    if (!loop || loop->pattern_count >= loop->pattern_capacity) {
+        return false;
+    }
+    
+    meta_reasoning_pattern_t* new_pattern = &loop->patterns[loop->pattern_count];
+    
+    new_pattern->reasoning_type = type;
+    strncpy(new_pattern->reasoning_pattern, pattern, sizeof(new_pattern->reasoning_pattern) - 1);
+    new_pattern->reasoning_pattern[sizeof(new_pattern->reasoning_pattern) - 1] = '\0';
+    new_pattern->pattern_strength = strength;
+    new_pattern->meta_confidence = 0.5f;
+    new_pattern->application_count = 0;
+    new_pattern->success_rate = 0.0f;
+    new_pattern->efficiency_score = 0.5f;
+    
+    loop->pattern_count++;
+    
+    printf("Added meta-reasoning pattern to loop %u: %s (strength: %.3f)\n",
+           meta_meta_id, pattern, strength);
+    
+    return true;
+}
+
+// Perform self-reflection on reasoning processes
+bool meta_meta_reasoning_self_reflect(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t meta_meta_id) {
+    
+    if (!arch || meta_meta_id == 0) {
+        return false;
+    }
+    
+    // Find the meta-meta-reasoning loop
+    meta_meta_reasoning_loop_t* loop = NULL;
+    for (size_t i = 0; i < arch->meta_meta_reasoning_count; i++) {
+        if (arch->meta_meta_reasoning_loops[i].meta_meta_id == meta_meta_id) {
+            loop = &arch->meta_meta_reasoning_loops[i];
+            break;
+        }
+    }
+    
+    if (!loop || !loop->self_reflective) {
+        return false;
+    }
+    
+    printf("Meta-meta self-reflection for loop %u...\n", meta_meta_id);
+    
+    bool reflection_improvement = false;
+    
+    // 1. Analyze current reasoning patterns for effectiveness
+    float total_effectiveness = 0.0f;
+    float total_confidence = 0.0f;
+    
+    for (size_t i = 0; i < loop->pattern_count; i++) {
+        meta_reasoning_pattern_t* pattern = &loop->patterns[i];
+        
+        // Update success rate based on application history
+        if (pattern->application_count > 0) {
+            pattern->success_rate = pattern->efficiency_score;
+        }
+        
+        total_effectiveness += pattern->efficiency_score;
+        total_confidence += pattern->meta_confidence;
+    }
+    
+    if (loop->pattern_count > 0) {
+        float avg_effectiveness = total_effectiveness / loop->pattern_count;
+        float avg_confidence = total_confidence / loop->pattern_count;
+        
+        // Update loop's overall reasoning effectiveness
+        float old_effectiveness = loop->reasoning_effectiveness;
+        loop->reasoning_effectiveness = (loop->reasoning_effectiveness + avg_effectiveness) * 0.5f;
+        
+        // Update self-awareness based on reasoning consistency
+        if (fabsf(loop->reasoning_effectiveness - old_effectiveness) < 0.05f) {
+            loop->self_awareness_level = fminf(1.0f, loop->self_awareness_level + 0.02f);
+            reflection_improvement = true;
+        }
+        
+        // Update meta-meta confidence based on pattern confidence
+        loop->meta_meta_confidence = (loop->meta_meta_confidence + avg_confidence) * 0.5f;
+    }
+    
+    // 2. Reflect on temporal reasoning consistency
+    if (loop->temporal_consistency > 0.8f) {
+        loop->self_awareness_level = fminf(1.0f, loop->self_awareness_level + 0.01f);
+        reflection_improvement = true;
+    }
+    
+    printf("Self-reflection completed. Awareness: %.3f, Effectiveness: %.3f\n",
+           loop->self_awareness_level, loop->reasoning_effectiveness);
+    
+    return reflection_improvement;
+}
+
+// Evolve reasoning patterns based on performance
+bool meta_meta_reasoning_evolve_patterns(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t meta_meta_id) {
+    
+    if (!arch || meta_meta_id == 0) {
+        return false;
+    }
+    
+    // Find the meta-meta-reasoning loop
+    meta_meta_reasoning_loop_t* loop = NULL;
+    for (size_t i = 0; i < arch->meta_meta_reasoning_count; i++) {
+        if (arch->meta_meta_reasoning_loops[i].meta_meta_id == meta_meta_id) {
+            loop = &arch->meta_meta_reasoning_loops[i];
+            break;
+        }
+    }
+    
+    if (!loop || !loop->pattern_learning_active || loop->pattern_count == 0) {
+        return false;
+    }
+    
+    printf("Evolving reasoning patterns for loop %u...\n", meta_meta_id);
+    
+    bool evolution_occurred = false;
+    
+    // Evolve each reasoning pattern
+    for (size_t i = 0; i < loop->pattern_count; i++) {
+        meta_reasoning_pattern_t* pattern = &loop->patterns[i];
+        
+        // Increase application count for tracking
+        pattern->application_count++;
+        
+        // Evolve pattern strength based on efficiency
+        if (pattern->efficiency_score > 0.7f) {
+            pattern->pattern_strength = fminf(1.0f, pattern->pattern_strength * 1.05f);
+            pattern->meta_confidence = fminf(1.0f, pattern->meta_confidence + 0.02f);
+            evolution_occurred = true;
+        } else if (pattern->efficiency_score < 0.3f) {
+            pattern->pattern_strength *= 0.95f;
+            pattern->meta_confidence = fmaxf(0.1f, pattern->meta_confidence - 0.01f);
+        }
+        
+        // Update efficiency score based on success rate and strength
+        pattern->efficiency_score = (pattern->success_rate + pattern->pattern_strength) * 0.5f;
+    }
+    
+    // Update overall pattern evolution rate
+    if (evolution_occurred) {
+        loop->pattern_evolution_rate = fminf(1.0f, loop->pattern_evolution_rate + 0.01f);
+    }
+    
+    printf("Pattern evolution completed. Evolution rate: %.3f\n", loop->pattern_evolution_rate);
+    
+    return evolution_occurred;
+}
+
+// Measure coherence of meta-meta-reasoning
+float meta_meta_reasoning_measure_coherence(
+    distributed_cognitive_architecture_t* arch,
+    uint32_t meta_meta_id) {
+    
+    if (!arch || meta_meta_id == 0) {
+        return 0.0f;
+    }
+    
+    // Find the meta-meta-reasoning loop
+    meta_meta_reasoning_loop_t* loop = NULL;
+    for (size_t i = 0; i < arch->meta_meta_reasoning_count; i++) {
+        if (arch->meta_meta_reasoning_loops[i].meta_meta_id == meta_meta_id) {
+            loop = &arch->meta_meta_reasoning_loops[i];
+            break;
+        }
+    }
+    
+    if (!loop) {
+        return 0.0f;
+    }
+    
+    // Measure coherence as a combination of multiple factors
+    float coherence = 0.0f;
+    
+    // 1. Pattern consistency (20%)
+    float pattern_consistency = 0.0f;
+    if (loop->pattern_count > 0) {
+        float total_strength = 0.0f;
+        for (size_t i = 0; i < loop->pattern_count; i++) {
+            total_strength += loop->patterns[i].pattern_strength;
+        }
+        pattern_consistency = total_strength / loop->pattern_count;
+    }
+    coherence += pattern_consistency * 0.2f;
+    
+    // 2. Self-awareness level (25%)
+    coherence += loop->self_awareness_level * 0.25f;
+    
+    // 3. Reasoning effectiveness (25%)
+    coherence += loop->reasoning_effectiveness * 0.25f;
+    
+    // 4. Temporal consistency (15%)
+    coherence += loop->temporal_consistency * 0.15f;
+    
+    // 5. Meta-meta confidence (15%)
+    coherence += loop->meta_meta_confidence * 0.15f;
+    
+    // Update loop's coherence
+    loop->reasoning_coherence = coherence;
+    
+    return coherence;
+}
+
+// Print status of all meta-meta-reasoning loops
+void meta_meta_reasoning_print_status(distributed_cognitive_architecture_t* arch) {
+    if (!arch) return;
+    
+    printf("\n=== Meta-Meta-Reasoning Status ===\n");
+    printf("Active: %s\n", arch->meta_meta_reasoning_active ? "YES" : "NO");
+    printf("Loops: %zu/%zu\n", arch->meta_meta_reasoning_count, arch->meta_meta_reasoning_capacity);
+    
+    for (size_t i = 0; i < arch->meta_meta_reasoning_count; i++) {
+        meta_meta_reasoning_loop_t* loop = &arch->meta_meta_reasoning_loops[i];
+        
+        printf("\nLoop %u: %s\n", loop->meta_meta_id, loop->description);
+        printf("  Status: %s\n", loop->active ? "ACTIVE" : "INACTIVE");
+        printf("  Patterns: %zu/%zu\n", loop->pattern_count, loop->pattern_capacity);
+        printf("  Self-awareness: %.3f\n", loop->self_awareness_level);
+        printf("  Reasoning coherence: %.3f\n", loop->reasoning_coherence);
+        printf("  Meta-meta confidence: %.3f\n", loop->meta_meta_confidence);
+        printf("  Reasoning effectiveness: %.3f\n", loop->reasoning_effectiveness);
+        printf("  Pattern evolution rate: %.3f\n", loop->pattern_evolution_rate);
+        printf("  Temporal consistency: %.3f\n", loop->temporal_consistency);
+        printf("  Cycles completed: %llu\n", (unsigned long long)loop->meta_cycles_completed);
+        printf("  Self-reflective: %s\n", loop->self_reflective ? "YES" : "NO");
+        printf("  Pattern learning: %s\n", loop->pattern_learning_active ? "YES" : "NO");
+    }
+    
+    printf("================================\n");
 }

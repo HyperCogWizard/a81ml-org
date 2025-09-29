@@ -463,4 +463,141 @@ void test_grammar_execution() {
 }
 ```
 
+## Meta-Meta-Reasoning Grammar
+
+The meta-meta-reasoning grammar extends the cognitive grammar system to support reasoning about reasoning processes themselves.
+
+### 4. Meta-Meta-Reasoning Grammar
+
+```gbnf
+# Meta-meta-reasoning grammar for self-reflective cognitive processes
+root ::= meta-meta-reasoning
+
+meta-meta-reasoning ::= 
+    meta-reasoning-loop |
+    meta-pattern-analysis |
+    meta-reflection |
+    meta-evolution
+
+meta-reasoning-loop ::=
+    "meta_meta_loop(" ws
+        "description(" string-literal ")" ws
+        "reasoning_patterns(" pattern-list ")" ws
+        "self_awareness(" awareness-level ")" ws
+        "coherence_target(" coherence-threshold ")" ws
+    ")"
+
+meta-pattern-analysis ::=
+    "analyze_reasoning_patterns(" ws
+        "patterns(" pattern-list ")" ws
+        "effectiveness_threshold(" threshold ")" ws
+        "evolution_rate(" rate-value ")" ws
+        "temporal_consistency(" consistency-value ")" ws
+    ")"
+
+meta-reflection ::=
+    "self_reflect(" ws
+        "reasoning_process(" reasoning-type ")" ws
+        "awareness_level(" awareness-level ")" ws
+        "confidence(" confidence-value ")" ws
+        "coherence_check(" boolean-value ")" ws
+    ")"
+
+meta-evolution ::=
+    "evolve_reasoning(" ws
+        "target_patterns(" pattern-list ")" ws
+        "evolution_strategy(" strategy-type ")" ws
+        "learning_rate(" rate-value ")" ws
+        "success_threshold(" threshold ")" ws
+    ")"
+
+pattern-list ::= reasoning-pattern (ws "," ws reasoning-pattern)*
+
+reasoning-pattern ::=
+    "pattern(" ws
+        "type(" reasoning-type ")" ws
+        "description(" string-literal ")" ws
+        "strength(" strength-value ")" ws
+        "confidence(" confidence-value ")" ws
+        "success_rate(" rate-value ")" ws
+    ")"
+
+reasoning-type ::= 
+    "deduction" | 
+    "induction" | 
+    "abduction" | 
+    "analogy" | 
+    "reflection"
+
+strategy-type ::=
+    "gradient_ascent" |
+    "pattern_mutation" |
+    "coherence_optimization" |
+    "self_modification"
+
+awareness-level ::= [0-9]+ "." [0-9]+
+coherence-threshold ::= [0-9]+ "." [0-9]+
+consistency-value ::= [0-9]+ "." [0-9]+
+strength-value ::= [0-9]+ "." [0-9]+
+rate-value ::= [0-9]+ "." [0-9]+
+boolean-value ::= "true" | "false"
+string-literal ::= "\"" [^"]* "\""
+
+ws ::= [ \t\n\r]*
+```
+
+### Example 5: Meta-Meta-Reasoning Chain
+
+```
+meta_meta_loop(
+    description("Self-reflective reasoning optimizer"),
+    reasoning_patterns(
+        pattern(
+            type(reflection),
+            description("Self-awareness analysis"),
+            strength(0.8),
+            confidence(0.7),
+            success_rate(0.85)
+        ),
+        pattern(
+            type(analogy),
+            description("Cross-domain reasoning transfer"),
+            strength(0.6),
+            confidence(0.65),
+            success_rate(0.72)
+        )
+    ),
+    self_awareness(0.75),
+    coherence_target(0.8)
+)
+
+analyze_reasoning_patterns(
+    patterns(
+        pattern(type(deduction), description("Logical inference"), strength(0.9), confidence(0.95), success_rate(0.88)),
+        pattern(type(induction), description("Pattern generalization"), strength(0.7), confidence(0.8), success_rate(0.75))
+    ),
+    effectiveness_threshold(0.7),
+    evolution_rate(0.1),
+    temporal_consistency(0.85)
+)
+
+self_reflect(
+    reasoning_process(reflection),
+    awareness_level(0.8),
+    confidence(0.75),
+    coherence_check(true)
+)
+
+evolve_reasoning(
+    target_patterns(
+        pattern(type(abduction), description("Hypothesis generation"), strength(0.5), confidence(0.6), success_rate(0.65)
+    ),
+    evolution_strategy(coherence_optimization),
+    learning_rate(0.05),
+    success_threshold(0.8)
+)
+```
+
 This cognitive grammar system provides a structured way to express and execute complex cognitive behaviors while leveraging the existing GBNF infrastructure from llama.cpp. The grammars ensure that cognitive operations are syntactically valid and semantically meaningful within the distributed agent network.
+
+The meta-meta-reasoning grammar extension enables the system to reason about its own reasoning processes, creating recursive loops of self-improvement and self-awareness that can continuously optimize cognitive performance.
