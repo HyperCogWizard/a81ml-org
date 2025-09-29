@@ -98,6 +98,10 @@ distributed_cognitive_architecture_t* distributed_cognitive_init(
     arch->dynamic_modules = calloc(arch->dynamic_module_capacity, sizeof(dynamic_cognitive_module_t));
     arch->dynamic_module_count = 0;
     
+    // Initialize emergent behavior analysis system
+    arch->behavior_analyzer = NULL;  // Will be initialized when enabled
+    arch->emergent_behavior_analysis_enabled = false;
+    
     // Initialize system state
     arch->initialized = true;
     arch->self_optimization_active = false;
@@ -1603,4 +1607,489 @@ void architecture_evolution_track_change(
     printf("Tracked evolution: %s (delta: %+.3f, %s)\n",
            change_description, record->performance_delta,
            record->successful ? "SUCCESS" : "FAILURE");
+}
+
+// ============================================================================
+// Emergent Behavior Analysis Implementation
+// ============================================================================
+
+// Utility functions for emergent behavior analysis
+static float compute_attention_coherence(float attention_dist[4]) {
+    float mean = 0.25f;  // Perfect balance
+    float variance = 0.0f;
+    
+    for (int i = 0; i < 4; i++) {
+        float diff = attention_dist[i] - mean;
+        variance += diff * diff;
+    }
+    
+    return 1.0f - (variance / 4.0f);  // Higher coherence = lower variance
+}
+
+static float compute_correlation(float* x, float* y, size_t n) {
+    if (n < 2) return 0.0f;
+    
+    float sum_x = 0.0f, sum_y = 0.0f, sum_xy = 0.0f, sum_x2 = 0.0f, sum_y2 = 0.0f;
+    
+    for (size_t i = 0; i < n; i++) {
+        sum_x += x[i];
+        sum_y += y[i];
+        sum_xy += x[i] * y[i];
+        sum_x2 += x[i] * x[i];
+        sum_y2 += y[i] * y[i];
+    }
+    
+    float numerator = n * sum_xy - sum_x * sum_y;
+    float denominator = sqrtf((n * sum_x2 - sum_x * sum_x) * (n * sum_y2 - sum_y * sum_y));
+    
+    return (denominator != 0.0f) ? numerator / denominator : 0.0f;
+}
+
+// Initialize emergent behavior analyzer
+static emergent_behavior_analyzer_t* emergent_behavior_analyzer_init(void) {
+    emergent_behavior_analyzer_t* analyzer = malloc(sizeof(emergent_behavior_analyzer_t));
+    if (!analyzer) return NULL;
+    
+    // Initialize behavior records
+    analyzer->behavior_capacity = 100;
+    analyzer->behaviors = malloc(sizeof(emergent_behavior_record_t) * analyzer->behavior_capacity);
+    analyzer->behavior_count = 0;
+    
+    // Initialize metric histories
+    analyzer->performance_history.sample_capacity = 1000;
+    analyzer->performance_history.samples = malloc(sizeof(behavior_metric_sample_t) * 1000);
+    analyzer->performance_history.sample_count = 0;
+    
+    analyzer->attention_coherence_history.sample_capacity = 1000;
+    analyzer->attention_coherence_history.samples = malloc(sizeof(behavior_metric_sample_t) * 1000);
+    analyzer->attention_coherence_history.sample_count = 0;
+    
+    analyzer->adaptation_rate_history.sample_capacity = 1000;
+    analyzer->adaptation_rate_history.samples = malloc(sizeof(behavior_metric_sample_t) * 1000);
+    analyzer->adaptation_rate_history.sample_count = 0;
+    
+    analyzer->module_activity_history.sample_capacity = 1000;
+    analyzer->module_activity_history.samples = malloc(sizeof(behavior_metric_sample_t) * 1000);
+    analyzer->module_activity_history.sample_count = 0;
+    
+    // Set analysis parameters
+    analyzer->novelty_threshold = 0.7f;
+    analyzer->correlation_threshold = 0.6f;
+    analyzer->min_pattern_length = 5;
+    analyzer->analysis_window_size = 50;
+    
+    // Initialize state
+    analyzer->system_time = 0;
+    analyzer->total_system_observations = 0;
+    analyzer->in_adaptation_phase = false;
+    analyzer->consecutive_improvements = 0;
+    analyzer->consecutive_degradations = 0;
+    
+    // Initialize cooldowns
+    analyzer->last_convergent_detection = 0;
+    analyzer->last_oscillatory_detection = 0;
+    analyzer->last_optimization_detection = 0;
+    analyzer->last_cooperation_detection = 0;
+    analyzer->last_adaptation_detection = 0;
+    analyzer->last_phase_transition_detection = 0;
+    
+    // Initialize history arrays
+    for (int i = 0; i < 10; i++) {
+        analyzer->last_performance_levels[i] = 0.5f;
+        for (int j = 0; j < 4; j++) {
+            analyzer->last_attention_states[i][j] = 0.25f;
+        }
+    }
+    
+    return analyzer;
+}
+
+// Add a metric sample to history
+static void add_metric_sample(behavior_metric_history_t* history, float value, uint64_t timestamp) {
+    if (history->sample_count >= history->sample_capacity) {
+        // Shift samples to make room (simple sliding window)
+        memmove(history->samples, history->samples + 1, 
+                (history->sample_capacity - 1) * sizeof(behavior_metric_sample_t));
+        history->sample_count = history->sample_capacity - 1;
+    }
+    
+    history->samples[history->sample_count].value = value;
+    history->samples[history->sample_count].timestamp = timestamp;
+    history->sample_count++;
+    
+    // Update statistical properties
+    float sum = 0.0f;
+    for (size_t i = 0; i < history->sample_count; i++) {
+        sum += history->samples[i].value;
+    }
+    history->mean = sum / history->sample_count;
+    
+    // Compute variance
+    float var_sum = 0.0f;
+    for (size_t i = 0; i < history->sample_count; i++) {
+        float diff = history->samples[i].value - history->mean;
+        var_sum += diff * diff;
+    }
+    history->variance = (history->sample_count > 1) ? var_sum / (history->sample_count - 1) : 0.0f;
+    
+    // Compute simple trend (slope of linear regression)
+    if (history->sample_count >= 3) {
+        float sum_t = 0.0f, sum_v = 0.0f, sum_tv = 0.0f, sum_t2 = 0.0f;
+        for (size_t i = 0; i < history->sample_count; i++) {
+            float t = (float)i;
+            float v = history->samples[i].value;
+            sum_t += t;
+            sum_v += v;
+            sum_tv += t * v;
+            sum_t2 += t * t;
+        }
+        
+        float n = (float)history->sample_count;
+        float denominator = n * sum_t2 - sum_t * sum_t;
+        history->trend = (denominator != 0.0f) ? (n * sum_tv - sum_t * sum_v) / denominator : 0.0f;
+        
+        history->is_trending = fabsf(history->trend) > 0.001f;
+        history->is_stable = history->variance < 0.01f && fabsf(history->trend) < 0.001f;
+    }
+}
+
+// Record an emergent behavior
+static void record_emergent_behavior(emergent_behavior_analyzer_t* analyzer,
+                                    emergent_behavior_type_t type,
+                                    const char* description,
+                                    float confidence,
+                                    float novelty_score,
+                                    distributed_cognitive_architecture_t* arch) {
+    
+    if (analyzer->behavior_count >= analyzer->behavior_capacity) {
+        return; // Could expand capacity here
+    }
+    
+    emergent_behavior_record_t* record = &analyzer->behaviors[analyzer->behavior_count];
+    
+    record->type = type;
+    strncpy(record->description, description, sizeof(record->description) - 1);
+    record->description[sizeof(record->description) - 1] = '\0';
+    
+    record->detection_timestamp = arch->system_time;
+    record->confidence = confidence;
+    record->novelty_score = novelty_score;
+    record->occurrences = 1;
+    
+    // Capture system context
+    float current_performance = distributed_cognitive_benchmark_performance(arch);
+    record->system_performance = current_performance;
+    memcpy(record->attention_distribution, arch->dashboard->attention_distribution, sizeof(float) * 4);
+    record->active_modules = arch->dynamic_module_count;
+    
+    record->triggered_by_self_modification = arch->self_optimization_active || arch->recursive_improvement_active;
+    
+    // Compute correlations if we have enough data
+    if (analyzer->performance_history.sample_count >= 5) {
+        size_t n = fminf(10, analyzer->performance_history.sample_count);
+        float perf_values[10];
+        float metric_values[10];
+        
+        for (size_t i = 0; i < n; i++) {
+            size_t idx = analyzer->performance_history.sample_count - n + i;
+            perf_values[i] = analyzer->performance_history.samples[idx].value;
+            metric_values[i] = novelty_score + 0.1f * ((float)i / n);
+        }
+        
+        float correlation = compute_correlation(perf_values, metric_values, n);
+        record->correlation_with_performance = (isnan(correlation) || isinf(correlation)) ? 0.0f : correlation;
+    } else {
+        record->correlation_with_performance = 0.0f;
+    }
+    
+    record->correlation_with_attention = compute_attention_coherence(arch->dashboard->attention_distribution);
+    
+    analyzer->behavior_count++;
+    
+    printf("EMERGENT BEHAVIOR DETECTED: %s (confidence: %.3f, novelty: %.3f)\n", 
+           description, confidence, novelty_score);
+}
+
+// Detect spontaneous optimization
+static bool detect_spontaneous_optimization(emergent_behavior_analyzer_t* analyzer, distributed_cognitive_architecture_t* arch) {
+    if (analyzer->performance_history.sample_count < 8) {
+        return false;
+    }
+    
+    // Check cooldown period
+    if (analyzer->system_time - analyzer->last_optimization_detection < 8) {
+        return false;
+    }
+    
+    // Check for improvement trend
+    bool improving_trend = analyzer->performance_history.is_trending && analyzer->performance_history.trend > 0.01f;
+    
+    // Check if this improvement coincides with self-modification activity
+    bool during_self_modification = arch->self_optimization_active || arch->recursive_improvement_active;
+    
+    if (improving_trend && !during_self_modification) {
+        analyzer->last_optimization_detection = analyzer->system_time;
+        record_emergent_behavior(analyzer, BEHAVIOR_TYPE_SPONTANEOUS_OPTIMIZATION,
+                               "System showing improvement without explicit optimization commands",
+                               0.9f, 0.9f, arch);
+        return true;
+    }
+    
+    return false;
+}
+
+// Detect convergent behavior
+static bool detect_convergent_behavior(emergent_behavior_analyzer_t* analyzer, distributed_cognitive_architecture_t* arch) {
+    if (analyzer->performance_history.sample_count < analyzer->min_pattern_length) {
+        return false;
+    }
+    
+    // Check cooldown period
+    if (analyzer->system_time - analyzer->last_convergent_detection < 10) {
+        return false;
+    }
+    
+    // Check if performance has stabilized recently
+    bool is_stable = analyzer->performance_history.is_stable;
+    bool was_changing = false;
+    
+    // Look at earlier history to see if there was change before stabilization
+    if (analyzer->performance_history.sample_count >= 10) {
+        float early_mean = 0.0f;
+        float late_mean = 0.0f;
+        
+        size_t mid_point = analyzer->performance_history.sample_count / 2;
+        
+        for (size_t i = 0; i < mid_point; i++) {
+            early_mean += analyzer->performance_history.samples[i].value;
+        }
+        early_mean /= mid_point;
+        
+        for (size_t i = mid_point; i < analyzer->performance_history.sample_count; i++) {
+            late_mean += analyzer->performance_history.samples[i].value;
+        }
+        late_mean /= (analyzer->performance_history.sample_count - mid_point);
+        
+        was_changing = fabsf(late_mean - early_mean) > 0.05f;
+    }
+    
+    if (is_stable && was_changing) {
+        analyzer->last_convergent_detection = analyzer->system_time;
+        record_emergent_behavior(analyzer, BEHAVIOR_TYPE_CONVERGENT,
+                               "System converged to stable performance after period of change",
+                               0.8f, 0.6f, arch);
+        return true;
+    }
+    
+    return false;
+}
+
+// Detect emergent cooperation
+static bool detect_emergent_cooperation(emergent_behavior_analyzer_t* analyzer, distributed_cognitive_architecture_t* arch) {
+    if (analyzer->module_activity_history.sample_count >= 5 && analyzer->performance_history.sample_count >= 5) {
+        
+        // Check cooldown
+        if (analyzer->system_time - analyzer->last_cooperation_detection < 12) {
+            return false;
+        }
+        
+        // Find recent period with module count increase
+        size_t recent_samples = fminf(5, analyzer->module_activity_history.sample_count);
+        bool module_increase = false;
+        float performance_improvement = 0.0f;
+        
+        for (size_t i = 1; i < recent_samples; i++) {
+            size_t idx = analyzer->module_activity_history.sample_count - recent_samples + i;
+            size_t prev_idx = idx - 1;
+            
+            if (analyzer->module_activity_history.samples[idx].value > 
+                analyzer->module_activity_history.samples[prev_idx].value) {
+                module_increase = true;
+                
+                // Check corresponding performance change
+                if (idx < analyzer->performance_history.sample_count && prev_idx < analyzer->performance_history.sample_count) {
+                    performance_improvement = analyzer->performance_history.samples[idx].value - 
+                                            analyzer->performance_history.samples[prev_idx].value;
+                }
+                break;
+            }
+        }
+        
+        // If module increase led to significant performance improvement (suggesting cooperation)
+        if (module_increase && performance_improvement > 0.1f) {
+            analyzer->last_cooperation_detection = analyzer->system_time;
+            record_emergent_behavior(analyzer, BEHAVIOR_TYPE_EMERGENT_COOPERATION,
+                                   "Modules showing emergent cooperative behavior with superlinear performance gains",
+                                   0.7f, 0.8f, arch);
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// Enable emergent behavior analysis
+bool distributed_cognitive_enable_emergent_behavior_analysis(distributed_cognitive_architecture_t* arch) {
+    if (!arch || arch->emergent_behavior_analysis_enabled) {
+        return false;
+    }
+    
+    arch->behavior_analyzer = emergent_behavior_analyzer_init();
+    if (!arch->behavior_analyzer) {
+        return false;
+    }
+    
+    arch->emergent_behavior_analysis_enabled = true;
+    printf("Emergent behavior analysis system enabled\n");
+    return true;
+}
+
+// Main analysis function
+bool emergent_behavior_analyze_system(distributed_cognitive_architecture_t* arch) {
+    if (!arch || !arch->emergent_behavior_analysis_enabled || !arch->behavior_analyzer) {
+        return false;
+    }
+    
+    emergent_behavior_analyzer_t* analyzer = arch->behavior_analyzer;
+    analyzer->system_time++;
+    analyzer->total_system_observations++;
+    
+    // Record current metrics
+    uint64_t timestamp = arch->system_time;
+    float current_performance = distributed_cognitive_benchmark_performance(arch);
+    add_metric_sample(&analyzer->performance_history, current_performance, timestamp);
+    
+    float attention_coherence = compute_attention_coherence(arch->dashboard->attention_distribution);
+    add_metric_sample(&analyzer->attention_coherence_history, attention_coherence, timestamp);
+    
+    add_metric_sample(&analyzer->module_activity_history, (float)arch->dynamic_module_count, timestamp);
+    
+    // Update performance tracking arrays
+    memmove(analyzer->last_performance_levels, analyzer->last_performance_levels + 1, sizeof(float) * 9);
+    analyzer->last_performance_levels[9] = current_performance;
+    
+    memmove(analyzer->last_attention_states, analyzer->last_attention_states + 1, sizeof(float[4]) * 9);
+    memcpy(analyzer->last_attention_states[9], arch->dashboard->attention_distribution, sizeof(float) * 4);
+    
+    // Track consecutive improvements/degradations
+    if (analyzer->total_system_observations > 1) {
+        if (current_performance > analyzer->last_performance_levels[8]) {
+            analyzer->consecutive_improvements++;
+            analyzer->consecutive_degradations = 0;
+        } else if (current_performance < analyzer->last_performance_levels[8]) {
+            analyzer->consecutive_degradations++;
+            analyzer->consecutive_improvements = 0;
+        }
+    }
+    
+    // Run behavior detection algorithms
+    bool detected_any = false;
+    
+    if (detect_convergent_behavior(analyzer, arch)) detected_any = true;
+    if (detect_spontaneous_optimization(analyzer, arch)) detected_any = true;
+    if (detect_emergent_cooperation(analyzer, arch)) detected_any = true;
+    
+    // Detect phase transitions (major performance level shifts)
+    if (analyzer->consecutive_improvements >= 5 && current_performance > 0.8f) {
+        if (analyzer->system_time - analyzer->last_phase_transition_detection >= 15) {
+            analyzer->last_phase_transition_detection = analyzer->system_time;
+            record_emergent_behavior(analyzer, BEHAVIOR_TYPE_PHASE_TRANSITION,
+                                   "System transitioned to high-performance operational mode",
+                                   0.9f, 0.7f, arch);
+            detected_any = true;
+        }
+    } else if (analyzer->consecutive_degradations >= 5 && current_performance < 0.3f) {
+        if (analyzer->system_time - analyzer->last_phase_transition_detection >= 15) {
+            analyzer->last_phase_transition_detection = analyzer->system_time;
+            record_emergent_behavior(analyzer, BEHAVIOR_TYPE_PHASE_TRANSITION,
+                                   "System transitioned to low-performance operational mode", 
+                                   0.9f, 0.5f, arch);
+            detected_any = true;
+        }
+    }
+    
+    return detected_any;
+}
+
+// Get behavior type name
+const char* emergent_behavior_get_type_name(emergent_behavior_type_t type) {
+    switch (type) {
+        case BEHAVIOR_TYPE_CONVERGENT: return "Convergent";
+        case BEHAVIOR_TYPE_OSCILLATORY: return "Oscillatory"; 
+        case BEHAVIOR_TYPE_CHAOTIC: return "Chaotic";
+        case BEHAVIOR_TYPE_EMERGENT_COOPERATION: return "Emergent Cooperation";
+        case BEHAVIOR_TYPE_SPONTANEOUS_OPTIMIZATION: return "Spontaneous Optimization";
+        case BEHAVIOR_TYPE_NOVEL_ADAPTATION: return "Novel Adaptation";
+        case BEHAVIOR_TYPE_RECURSIVE_ENHANCEMENT: return "Recursive Enhancement";
+        case BEHAVIOR_TYPE_PHASE_TRANSITION: return "Phase Transition";
+        default: return "Unknown";
+    }
+}
+
+// Print analysis summary
+void emergent_behavior_print_analysis(distributed_cognitive_architecture_t* arch) {
+    if (!arch || !arch->emergent_behavior_analysis_enabled || !arch->behavior_analyzer) {
+        printf("Emergent behavior analysis not enabled\n");
+        return;
+    }
+    
+    emergent_behavior_analyzer_t* analyzer = arch->behavior_analyzer;
+    
+    printf("\n=== Emergent Behavior Analysis Summary ===\n");
+    printf("Total observations: %u\n", analyzer->total_system_observations);
+    printf("Detected behaviors: %zu\n", analyzer->behavior_count);
+    
+    if (analyzer->behavior_count > 0) {
+        printf("\nDetected Behaviors:\n");
+        for (size_t i = 0; i < analyzer->behavior_count; i++) {
+            emergent_behavior_record_t* behavior = &analyzer->behaviors[i];
+            printf("  %zu: %s - %s\n", i + 1, emergent_behavior_get_type_name(behavior->type), behavior->description);
+            printf("      Confidence: %.3f, Novelty: %.3f, Occurrences: %u\n",
+                   behavior->confidence, behavior->novelty_score, behavior->occurrences);
+            printf("      Performance correlation: %.3f, Attention correlation: %.3f\n",
+                   behavior->correlation_with_performance, behavior->correlation_with_attention);
+        }
+    }
+    
+    printf("\nSystem Metrics Summary:\n");
+    printf("  Performance - Mean: %.3f, Variance: %.3f, Trend: %.3f\n",
+           analyzer->performance_history.mean, analyzer->performance_history.variance, analyzer->performance_history.trend);
+    printf("  Attention Coherence - Mean: %.3f, Variance: %.3f\n", 
+           analyzer->attention_coherence_history.mean, analyzer->attention_coherence_history.variance);
+    printf("  System Status: %s, %s\n",
+           analyzer->performance_history.is_stable ? "Stable" : "Changing",
+           analyzer->performance_history.is_trending ? "Trending" : "Flat");
+}
+
+// Get detection count
+size_t emergent_behavior_get_detection_count(distributed_cognitive_architecture_t* arch) {
+    if (!arch || !arch->emergent_behavior_analysis_enabled || !arch->behavior_analyzer) {
+        return 0;
+    }
+    return arch->behavior_analyzer->behavior_count;
+}
+
+// Compute novelty score
+float emergent_behavior_compute_novelty_score(distributed_cognitive_architecture_t* arch, emergent_behavior_type_t type) {
+    if (!arch || !arch->emergent_behavior_analysis_enabled || !arch->behavior_analyzer) {
+        return 0.0f;
+    }
+    
+    emergent_behavior_analyzer_t* analyzer = arch->behavior_analyzer;
+    
+    // Count occurrences of this behavior type
+    uint32_t type_occurrences = 0;
+    for (size_t i = 0; i < analyzer->behavior_count; i++) {
+        if (analyzer->behaviors[i].type == type) {
+            type_occurrences++;
+        }
+    }
+    
+    // Novelty decreases with frequency
+    float base_novelty = 1.0f;
+    if (type_occurrences > 0) {
+        base_novelty = 1.0f / (1.0f + type_occurrences * 0.1f);
+    }
+    
+    return base_novelty;
 }

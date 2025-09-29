@@ -192,6 +192,95 @@ typedef struct {
     uint64_t last_update_time;
 } dynamic_cognitive_module_t;
 
+// Emergent behavior analysis structures
+typedef enum {
+    BEHAVIOR_TYPE_UNKNOWN = 0,
+    BEHAVIOR_TYPE_CONVERGENT,
+    BEHAVIOR_TYPE_OSCILLATORY,
+    BEHAVIOR_TYPE_CHAOTIC,
+    BEHAVIOR_TYPE_EMERGENT_COOPERATION,
+    BEHAVIOR_TYPE_SPONTANEOUS_OPTIMIZATION,
+    BEHAVIOR_TYPE_NOVEL_ADAPTATION,
+    BEHAVIOR_TYPE_RECURSIVE_ENHANCEMENT,
+    BEHAVIOR_TYPE_PHASE_TRANSITION
+} emergent_behavior_type_t;
+
+typedef struct {
+    emergent_behavior_type_t type;
+    char description[256];
+    uint64_t detection_timestamp;
+    float confidence;
+    float novelty_score;
+    uint32_t occurrences;
+    
+    // Context data
+    float system_performance;
+    float attention_distribution[4];
+    uint32_t active_modules;
+    
+    // Correlation data
+    float correlation_with_performance;
+    float correlation_with_attention;
+    bool triggered_by_self_modification;
+} emergent_behavior_record_t;
+
+typedef struct {
+    float value;
+    uint64_t timestamp;
+} behavior_metric_sample_t;
+
+typedef struct {
+    behavior_metric_sample_t* samples;
+    size_t sample_count;
+    size_t sample_capacity;
+    
+    // Statistical properties
+    float mean;
+    float variance;
+    float trend;
+    float periodicity;
+    bool is_stable;
+    bool is_trending;
+} behavior_metric_history_t;
+
+typedef struct emergent_behavior_analyzer {
+    // Behavior records
+    emergent_behavior_record_t* behaviors;
+    size_t behavior_count;
+    size_t behavior_capacity;
+    
+    // Metric histories
+    behavior_metric_history_t performance_history;
+    behavior_metric_history_t attention_coherence_history;
+    behavior_metric_history_t adaptation_rate_history;
+    behavior_metric_history_t module_activity_history;
+    
+    // Analysis parameters
+    float novelty_threshold;
+    float correlation_threshold;
+    uint32_t min_pattern_length;
+    uint32_t analysis_window_size;
+    
+    // System state tracking
+    uint64_t system_time;
+    uint32_t total_system_observations;
+    
+    // Pattern detection state
+    float last_performance_levels[10];
+    float last_attention_states[10][4];
+    bool in_adaptation_phase;
+    uint32_t consecutive_improvements;
+    uint32_t consecutive_degradations;
+    
+    // Behavior detection cooldowns
+    uint32_t last_convergent_detection;
+    uint32_t last_oscillatory_detection;
+    uint32_t last_optimization_detection;
+    uint32_t last_cooperation_detection;
+    uint32_t last_adaptation_detection;
+    uint32_t last_phase_transition_detection;
+} emergent_behavior_analyzer_t;
+
 // Distributed cognitive architecture
 typedef struct {
     // Core systems
@@ -232,6 +321,10 @@ typedef struct {
     dynamic_cognitive_module_t* dynamic_modules;
     size_t dynamic_module_count;
     size_t dynamic_module_capacity;
+    
+    // Emergent behavior analysis system
+    struct emergent_behavior_analyzer* behavior_analyzer;
+    bool emergent_behavior_analysis_enabled;
     
     // System state
     bool initialized;
@@ -480,6 +573,26 @@ GGML_API bool distributed_cognitive_run_test_suite(
 
 GGML_API float distributed_cognitive_benchmark_performance(
     distributed_cognitive_architecture_t* arch);
+
+// Emergent behavior analysis functions  
+GGML_API bool distributed_cognitive_enable_emergent_behavior_analysis(
+    distributed_cognitive_architecture_t* arch);
+
+GGML_API bool emergent_behavior_analyze_system(
+    distributed_cognitive_architecture_t* arch);
+
+GGML_API void emergent_behavior_print_analysis(
+    distributed_cognitive_architecture_t* arch);
+
+GGML_API size_t emergent_behavior_get_detection_count(
+    distributed_cognitive_architecture_t* arch);
+
+GGML_API const char* emergent_behavior_get_type_name(
+    emergent_behavior_type_t type);
+
+GGML_API float emergent_behavior_compute_novelty_score(
+    distributed_cognitive_architecture_t* arch,
+    emergent_behavior_type_t type);
 
 #ifdef __cplusplus
 }
