@@ -2494,3 +2494,4 @@ void meta_meta_reasoning_print_status(distributed_cognitive_architecture_t* arch
     
     printf("================================\n");
 }
+}
